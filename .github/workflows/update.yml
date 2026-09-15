@@ -1,5 +1,6 @@
 name: Forel agent
 on:
+  push:
   schedule:
     - cron: '0 5 * * *'
   workflow_dispatch:
@@ -23,6 +24,6 @@ jobs:
         run: |
           git config user.name "forel-bot"
           git config user.email "forel-bot@users.noreply.github.com"
-          git add state.json pages index.html || true
+          git add -A
           git commit -m "agent update" || echo "nothing to commit"
           git push
