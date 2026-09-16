@@ -5,24 +5,13 @@ from curl_cffi import requests
 from bs4 import BeautifulSoup
 
 THREAD = "https://www.rusfishing.ru/forum/threads/rybalka-v-krasnogorske.32280"
-START_DATE = "2024-01-01"
-BALANCE_START = "2026-09-01"     # остаток форели считаем с этой даты
-ADMIN_AUTHORS = []               # ники админов ["Ник1"]; пусто = все посты
-BATCH = 200
-REFRESH_TAIL = 150               # последних страниц перечитываем всегда
-HEADERS = {
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-    "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Sec-Ch-Ua": '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-    "Sec-Ch-Ua-Mobile": "?0",
-    "Sec-Ch-Ua-Platform": '"Windows"',
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "Upgrade-Insecure-Requests": "1",
-}
-FOREL_RX = re.compile("форел", re.I)
+START_DATE = "2024-01-01"        # Общая аналитика постов с 2024 года
+BALANCE_START = "2026-09-01"     # Отсчет остатка форели СТРОГО с 01.09.2026
+ADMIN_AUTHORS = []               # Ники админов (если нужно ограничить)
+BATCH = 150
+REFRESH_TAIL = 100
+
+FOREL_RX = re.compile(r"форел", re.I)
 OTHER_FISH = re.compile(r"осет|осётр|карп|сом\b|щук|белуг|стерляд|карас|окун|судак|сиг\b|налим|амур|толстолоб|линь", re.I)
 
 TEMPLATE = """<!DOCTYPE html>
@@ -31,10 +20,10 @@ TEMPLATE = """<!DOCTYPE html>
 <title>Форель Красногорск</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
-body{font-family:system-ui,sans-serif;margin:0 auto;padding:12px;background:#0f172a;color:#e2e8f0;max-width:820px}
+body{font-family:system-ui,-apple-system,sans-serif;margin:0 auto;padding:12px;background:#0f172a;color:#e2e8f0;max-width:820px}
 h1{font-size:1.4rem;background:linear-gradient(90deg,#38bdf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .card{background:#1e293b;border-radius:14px;padding:14px;margin:10px 0}
-.big{font-size:1.9rem;font-weight:800;color:#fbbf24}
+.big{font-size:1.8rem;font-weight:800;color:#fbbf24}
 table{width:100%;border-collapse:collapse;font-size:.8rem}
 td,th{padding:6px 4px;border-bottom:1px solid #334155;text-align:left;vertical-align:top}
 a{color:#7dd3fc;text-decoration:none}
@@ -44,63 +33,123 @@ a{color:#7dd3fc;text-decoration:none}
 <h1>🎣 Форель в Красногорске</h1>
 
 <h2>🐟 Остаток форели в водоёме</h2>
-<div class="card"><div class="big" id="rem">—</div>
-<div class="note">запущено <b id="st">0</b> кг − выловлено <b id="ct">0</b> кг • считаем с <span id="bs"></span><br>
-последний запуск: <span id="dsl">—</span> • обновлено <span id="upd2"></span></div></div>
+<div class="card">
+  <div class="big" id="rem">—</div>
+  <div class="note">запущено <b id="st">0</b> кг − выловлено <b id="ct">0</b> кг • отсчёт с <span id="bs"></span><br>
+  последний запуск: <span id="dsl">—</span> • обновлено <span id="upd2"></span></div>
+</div>
 <div class="card" id="balbox"><canvas id="bal"></canvas></div>
+
 <h3>Журнал запусков и выловов</h3>
 <div class="card"><table id="ev"></table></div>
-<div class="note">Правило: берётся утренний запуск форели и вечерний итог вылова. Нажми на цитату — откроется пост на форуме.</div>
 
 <h2>📊 Активность обсуждений с 2024</h2>
-<div class="card"><div class="note" id="prog"></div>
-<div class="note">постов про форель за <span id="days"></span> дней</div></div>
+<div class="card">
+  <div class="note" id="prog"></div>
+  <div class="big" style="color:#38bdf8" id="total">0</div>
+  <div class="note">постов про форель за <span id="days">0</span> активных дней</div>
+</div>
+
+<h3>Активность по месяцам (постов/день)</h3>
 <div class="card"><canvas id="m"></canvas></div>
+
 <h3>Клёв vs давление</h3>
 <div class="card"><canvas id="p"></canvas></div>
+
 <h3>Последние активные дни</h3>
 <div class="card"><table id="t"></table></div>
+
 <script>
-const D=__DATA__;
-const B=D.balance;
-document.getElementById('bs').textContent=B.start;
-document.getElementById('st').textContent=B.total_stocked;
-document.getElementById('ct').textContent=B.total_caught;
-document.getElementById('rem').textContent='≈ '+B.remaining+' кг';
-document.getElementById('dsl').textContent=B.days_since_stock===null?'нет данных':B.days_since_stock+' дн. назад';
-document.getElementById('upd2').textContent=D.stats.updated;
-if(B.series.dates.length){
- new Chart(document.getElementById('bal'),{data:{labels:B.series.dates,datasets:[
-  {type:'line',label:'Остаток кг',data:B.series.remaining,borderColor:'#fbbf24',tension:0.3,pointRadius:0,borderWidth:2},
-  {type:'bar',label:'Запуск',data:B.series.stocked,backgroundColor:'#4ade80'},
-  {type:'bar',label:'Вылов',data:B.series.caught,backgroundColor:'#f87171'}]},
-  options:{plugins:{legend:{labels:{color:'#e2e8f0',boxWidth:12}}},scales:{x:{ticks:{maxTicksLimit:8,color:#94a3b8}},y:{ticks:{color:'#94a3b8'}}}}});
-}else{
- document.getElementById('balbox').innerHTML='<div class="note">Пока нет отчётов админов после даты старта — агент ждёт запусков.</div>';
+try {
+  const D = __DATA__;
+  const B = D.balance || {};
+  
+  // 1. Блок баланса
+  document.getElementById('bs').textContent = B.start || '01.09.2026';
+  document.getElementById('st').textContent = B.total_stocked || 0;
+  document.getElementById('ct').textContent = B.total_caught || 0;
+  document.getElementById('rem').textContent = (B.events && B.events.length) ? ('≈ ' + (B.remaining || 0) + ' кг') : 'Ожидание 01.09.2026';
+  document.getElementById('dsl').textContent = (B.days_since_stock !== null && B.days_since_stock !== undefined) ? (B.days_since_stock + ' дн. назад') : 'нет данных';
+  document.getElementById('upd2').textContent = (D.stats && D.stats.updated) || '';
+  
+  if (B.series && B.series.dates && B.series.dates.length > 0) {
+    new Chart(document.getElementById('bal'), {
+      data: {
+        labels: B.series.dates,
+        datasets: [
+          {type: 'line', label: 'Остаток кг', data: B.series.remaining, borderColor: '#fbbf24', tension: 0.3, pointRadius: 0, borderWidth: 2},
+          {type: 'bar', label: 'Запуск', data: B.series.stocked, backgroundColor: '#4ade80'},
+          {type: 'bar', label: 'Вылов', data: B.series.caught, backgroundColor: '#f87171'}
+        ]
+      },
+      options: {
+        plugins: {legend: {labels: {color: '#e2e8f0', boxWidth: 12}}},
+        scales: {x: {ticks: {maxTicksLimit: 8, color: '#94a3b8'}}, y: {ticks: {color: '#94a3b8'}}}
+      }
+    });
+  } else {
+    document.getElementById('balbox').innerHTML = '<div class="note">Отчёты по запускам и выловам будут отображаться здесь начиная с даты старта (' + (B.start || '01.09.2026') + ').</div>';
+  }
+
+  if (B.events && B.events.length > 0) {
+    document.getElementById('ev').innerHTML = '<tr><th>Дата</th><th></th><th>кг</th><th>Цитата</th></tr>' +
+      B.events.map(e => `<tr><td>${e.day}</td><td>${e.type==='запуск'?'🟢':'🔴'}</td><td><b>${e.kg}</b></td><td class="q"><a href="${e.url}" target="_blank">${e.quote}</a></td></tr>`).join('');
+  } else {
+    document.getElementById('ev').innerHTML = '<tr><td class="note">Пока нет записей о зарыблении за выбранный период.</td></tr>';
+  }
+
+  // 2. Блок статистики с 2024
+  if (D.stats) {
+    document.getElementById('prog').textContent = 'Собрано страниц: ' + (D.stats.collected || 0) + ' из ~' + (D.stats.need || 0) + ' (' + (D.stats.pct || 0) + '%)';
+    document.getElementById('total').textContent = D.stats.total_posts || 0;
+    document.getElementById('days').textContent = D.stats.active_days || 0;
+
+    if (D.stats.monthly && Object.keys(D.stats.monthly).length > 0) {
+      new Chart(document.getElementById('m'), {
+        type: 'bar',
+        data: {
+          labels: Object.keys(D.stats.monthly),
+          datasets: [{data: Object.values(D.stats.monthly), backgroundColor: '#38bdf8'}]
+        },
+        options: {plugins: {legend: {display: false}}, scales: {x: {ticks: {color: '#94a3b8'}}, y: {ticks: {color: '#94a3b8'}}}}
+      });
+    }
+
+    if (D.stats.pressure && Object.keys(D.stats.pressure).length > 0) {
+      new Chart(document.getElementById('p'), {
+        type: 'bar',
+        data: {
+          labels: Object.keys(D.stats.pressure),
+          datasets: [{data: Object.values(D.stats.pressure), backgroundColor: '#4ade80'}]
+        },
+        options: {plugins: {legend: {display: false}}, scales: {x: {ticks: {color: '#94a3b8'}}, y: {ticks: {color: '#94a3b8'}}}}
+      });
+    }
+  }
+
+  // 3. Таблица активных дней
+  if (D.table && D.table.length > 0) {
+    document.getElementById('t').innerHTML = '<tr><th>Дата</th><th>П</th><th>t°</th><th>Давл</th><th>Осадки</th><th></th></tr>' +
+      D.table.map(r => `<tr><td>${r.day}</td><td>${r.posts}</td><td>${r.temp??'—'}</td><td>${r.pressure??'—'}</td><td>${r.precip??'—'}</td><td>${(r.links||[]).map((u,i)=>`<a href="${u}" target="_blank">#${i+1}</a>`).join(' ')}</td></tr>`).join('');
+  }
+} catch (err) {
+  console.error("Render error:", err);
 }
-document.getElementById('ev').innerHTML='<tr><th>Дата</th><th></th><th>кг</th><th>Цитата</th></tr>'+
- B.events.map(e=>`<tr><td>${e.day}</td><td>${e.type==='запуск'?'🟢':'🔴'}</td><td><b>${e.kg}</b></td>
- <td class="q"><a href="${e.url}" target="_blank">${e.quote}</a></td></tr>`).join('');
-document.getElementById('prog').textContent='Собрано страниц: '+D.stats.collected+' из ~'+D.stats.need+' ('+D.stats.pct+'%)';
-document.getElementById('days').textContent=D.stats.active_days;
-new Chart(document.getElementById('m'),{type:'bar',data:{labels:Object.keys(D.stats.monthly),datasets:[{data:Object.values(D.stats.monthly),backgroundColor:'#38bdf8'}]},options:{plugins:{legend:{display:false}}}});
-new Chart(document.getElementById('p'),{type:'bar',data:{labels:Object.keys(D.stats.pressure),datasets:[{data:Object.values(D.stats.pressure),backgroundColor:'#4ade80'}]},options:{plugins:{legend:{display:false}}}});
-document.getElementById('t').innerHTML='<tr><th>Дата</th><th>П</th><th>t°</th><th>Давл</th><th>Осадки</th><th></th></tr>'+D.table.map(r=>`<tr><td>${r.day}</td><td>${r.posts}</td><td>${r.temp??'—'}</td><td>${r.pressure??'—'}</td><td>${r.precip??'—'}</td><td>${r.links.map((u,i)=>`<a href="${u}" target="_blank">#${i+1}</a>`).join(' ')}</td></tr>`).join('');
 </script></body></html>"""
 
 def page_url(p):
     return THREAD if p == 1 else f"{THREAD}/page-{p}"
 
-def fetch(url, tries=4):
+def fetch(url, tries=3):
     for i in range(tries):
         try:
-            r = requests.get(url, impersonate="chrome120", headers=HEADERS, timeout=30)
+            r = requests.get(url, impersonate="chrome120", timeout=25)
             if r.status_code == 200:
                 return r.text
-            print(f"status {r.status_code} on {url}")
+            print(f"Status {r.status_code} on {url}")
         except Exception as e:
-            print(f"retry {i+1}: {e}")
-        time.sleep(4 * (i + 1))
+            print(f"Retry {i+1}: {e}")
+        time.sleep(3 * (i + 1))
     return None
 
 def parse_posts(html, page):
@@ -173,8 +222,7 @@ def to_kg(num_s, unit_s):
 def snippet(text, pos, width=80):
     a = max(0, pos - 15)
     b = min(len(text), pos + width)
-    s = re.sub(r"\s+", " ", text[a:b]).strip()
-    return "…" + s + "…"
+    return "…" + re.sub(r"\s+", " ", text[a:b]).strip() + "…"
 
 def _near(text, pos, rx, rad):
     a = max(0, pos - rad); b = min(len(text), pos + rad)
@@ -208,22 +256,23 @@ def main():
     DB.execute("DROP TABLE IF EXISTS posts")
     DB.execute("CREATE TABLE posts (post_id TEXT PRIMARY KEY, page INT, author TEXT, post_dt TEXT, text TEXT)")
     state = load_state()
-    print("качаю первую страницу...")
+    
+    print("Проверяю форум...")
     html1 = fetch(page_url(1))
     if not html1:
-        raise SystemExit("forum no answer")
+        raise SystemExit("Форум не ответил")
     last = total_pages(html1)
-    print(f"всего страниц: {last}")
+    print(f"Всего страниц: {last}")
 
     if not state.get("start_page"):
-        print("ищу начало 2024...")
+        print("Ищу 2024 год...")
         lo, hi = 1, last
         while lo < hi:
             mid = (lo + hi)//2
             h = fetch(page_url(mid))
             d = first_date(h) if h else ""
             print(f" стр.{mid}: {d or '?'}")
-            time.sleep(2)
+            time.sleep(1.5)
             if not d or d >= START_DATE:
                 hi = mid
             else:
@@ -231,7 +280,6 @@ def main():
         state["start_page"] = max(1, lo-1)
         state["cursor"] = last
         state["newest"] = last
-        print(f"старт с {state['start_page']}")
 
     start_page = state["start_page"]
     to_do = []
@@ -251,7 +299,7 @@ def main():
 
     tail = list(range(max(start_page, last - REFRESH_TAIL + 1), last + 1))
     to_do = sorted(set(to_do + added + tail))
-    print(f"качаю/обновляю {len(to_do)} стр., курсор {state['cursor']}")
+    print(f"Загружаю {len(to_do)} страниц...")
 
     for i, pg in enumerate(to_do):
         h = fetch(page_url(pg))
@@ -259,7 +307,7 @@ def main():
             posts = parse_posts(h, pg)
             json.dump(posts, open(f"pages/page_{pg:06d}.json", "w", encoding="utf-8"), ensure_ascii=False)
             print(f" {i+1}/{len(to_do)} стр.{pg}: {len(posts)} постов")
-        time.sleep(random.uniform(2.0, 3.5))
+        time.sleep(random.uniform(1.5, 2.5))
         if (i+1) % 20 == 0:
             json.dump(state, open("state.json", "w"), ensure_ascii=False)
 
@@ -278,7 +326,7 @@ def main():
 
     json.dump(state, open("state.json", "w"), ensure_ascii=False)
     build(DB, state, last)
-    print("ГОТОВО")
+    print("Успешно завершено!")
 
 def build(DB, state, last):
     days = defaultdict(list)
@@ -315,14 +363,14 @@ def build(DB, state, last):
             "start_date": START_DATE,
             "end_date": str(date.today() - timedelta(days=5)),
             "daily": "temperature_2m_mean,precipitation_sum,pressure_msl_mean",
-            "timezone": "Europe/Moscow"}, timeout=60).json()["daily"]
+            "timezone": "Europe/Moscow"}, timeout=30).json()["daily"]
         for i, day in enumerate(w["time"]):
             pr = w["pressure_msl_mean"][i]
             weather[day] = {"temp": w["temperature_2m_mean"][i],
                 "precip": w["precipitation_sum"][i],
                 "pressure": round(pr*0.75006, 1) if pr else None}
     except Exception as e:
-        print("weather fail:", e)
+        print("Погода недоступна:", e)
 
     month_act = defaultdict(list)
     press = {"<745": [], "745-760": [], ">760": []}
@@ -389,7 +437,7 @@ def build(DB, state, last):
     payload = json.dumps({"stats": stats, "table": table, "balance": balance}, ensure_ascii=False)
     payload = payload.replace("</", "<\\/")
     open("index.html", "w", encoding="utf-8").write(TEMPLATE.replace("__DATA__", payload))
-    print(f"site done: balance {remaining} kg ({total_s}/{total_c})")
+    print(f"Сайт собран: остаток {remaining} кг")
 
 if __name__ == "__main__":
     main()
