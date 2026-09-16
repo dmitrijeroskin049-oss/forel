@@ -453,8 +453,8 @@ def build(DB,state,last):
         table.append({"day":dd,"posts":len(days[dd]),"temp":wv.get("temp"),
             "pressure":wv.get("pressure"),"precip":wv.get("precip"),"links":days[dd][:5]})
 
-    bdates,bst,bct,brem=[],[],[],[]
-    total_s,total_c=0,BAL,BAC=0,0
+    bbdates,bst,bct,brem=[],[],[],[]
+    total_s = total_c = BAL = BAC = 0
     last_stock_day=None
     
     # Начальная точка: 09.09.2026 = 580 кг
