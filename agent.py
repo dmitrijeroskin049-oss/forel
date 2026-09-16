@@ -1,18 +1,26 @@
 import os, re, json, time, random
 from collections import defaultdict
 from datetime import date, timedelta
-import requests
+from curl_cffi import requests
 from bs4 import BeautifulSoup
 
 THREAD = "https://www.rusfishing.ru/forum/threads/rybalka-v-krasnogorske.32280"
 START_DATE = "2024-01-01"
 BALANCE_START = "2026-09-01"     # остаток форели считаем с этой даты
 ADMIN_AUTHORS = []               # ники админов ["Ник1"]; пусто = все посты
-BATCH = 250
-REFRESH_TAIL = 200               # последних страниц перечитываем всегда (для времени и свежих событий)
+BATCH = 200
+REFRESH_TAIL = 150               # последних страниц перечитываем всегда
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Accept-Language": "ru-RU,ru;q=0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Sec-Ch-Ua": '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
 }
 FOREL_RX = re.compile("форел", re.I)
 OTHER_FISH = re.compile(r"осет|осётр|карп|сом\b|щук|белуг|стерляд|карас|окун|судак|сиг\b|налим|амур|толстолоб|линь", re.I)
@@ -42,7 +50,7 @@ a{color:#7dd3fc;text-decoration:none}
 <div class="card" id="balbox"><canvas id="bal"></canvas></div>
 <h3>Журнал запусков и выловов</h3>
 <div class="card"><table id="ev"></table></div>
-<div class="note">Правило: за день берётся первое утреннее упоминание запуска форели и последнее вечернее упоминание вылова. Осётр и прочая рыба исключены. Нажми на цитату — откроется пост.</div>
+<div class="note">Правило: берётся утренний запуск форели и вечерний итог вылова. Нажми на цитату — откроется пост на форуме.</div>
 
 <h2>📊 Активность обсуждений с 2024</h2>
 <div class="card"><div class="note" id="prog"></div>
@@ -66,7 +74,7 @@ if(B.series.dates.length){
   {type:'line',label:'Остаток кг',data:B.series.remaining,borderColor:'#fbbf24',tension:0.3,pointRadius:0,borderWidth:2},
   {type:'bar',label:'Запуск',data:B.series.stocked,backgroundColor:'#4ade80'},
   {type:'bar',label:'Вылов',data:B.series.caught,backgroundColor:'#f87171'}]},
-  options:{plugins:{legend:{labels:{color:'#e2e8f0',boxWidth:12}}},scales:{x:{ticks:{maxTicksLimit:8,color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}}}});
+  options:{plugins:{legend:{labels:{color:'#e2e8f0',boxWidth:12}}},scales:{x:{ticks:{maxTicksLimit:8,color:#94a3b8}},y:{ticks:{color:'#94a3b8'}}}}});
 }else{
  document.getElementById('balbox').innerHTML='<div class="note">Пока нет отчётов админов после даты старта — агент ждёт запусков.</div>';
 }
@@ -86,12 +94,13 @@ def page_url(p):
 def fetch(url, tries=4):
     for i in range(tries):
         try:
-            r = requests.get(url, headers=HEADERS, timeout=30)
-            r.raise_for_status()
-            return r.text
+            r = requests.get(url, impersonate="chrome120", headers=HEADERS, timeout=30)
+            if r.status_code == 200:
+                return r.text
+            print(f"status {r.status_code} on {url}")
         except Exception as e:
             print(f"retry {i+1}: {e}")
-            time.sleep(3*(i+1))
+        time.sleep(4 * (i + 1))
     return None
 
 def parse_posts(html, page):
@@ -214,7 +223,7 @@ def main():
             h = fetch(page_url(mid))
             d = first_date(h) if h else ""
             print(f" стр.{mid}: {d or '?'}")
-            time.sleep(1)
+            time.sleep(2)
             if not d or d >= START_DATE:
                 hi = mid
             else:
@@ -250,7 +259,7 @@ def main():
             posts = parse_posts(h, pg)
             json.dump(posts, open(f"pages/page_{pg:06d}.json", "w", encoding="utf-8"), ensure_ascii=False)
             print(f" {i+1}/{len(to_do)} стр.{pg}: {len(posts)} постов")
-        time.sleep(random.uniform(1.2, 2.2))
+        time.sleep(random.uniform(2.0, 3.5))
         if (i+1) % 20 == 0:
             json.dump(state, open("state.json", "w"), ensure_ascii=False)
 
