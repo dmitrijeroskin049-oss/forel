@@ -80,6 +80,14 @@ CATCH_NOUNIT_RX = re.compile(
     re.I,
 )
 
+# Конец предложения — правая привязка числа к слову
+# через точку запрещена («150 кг. Вылов 56 кг»).
+SENTENCE_RX = re.compile(r"[.!?…]")
+
+# Между словом и числом не должно быть «корм/прикорм»,
+# иначе «завоз корма 500 кг» примется за запуск рыбы.
+BAD_BETWEEN_RX = re.compile(r"корм|прикорм|пеллет|смес", re.I)
+
 TEMPLATE = """<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -198,6 +206,7 @@ try {
 </body>
 </html>"""
 
+
 def page_url(page_number):
     if page_number == 1:
         return THREAD
@@ -211,11 +220,11 @@ def fetch(url, tries=3):
                 url,
                 impersonate="chrome120",
                 timeout=25,
-                headers={"Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8"}
+                headers={"Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8"},
             )
             if response.status_code == 200:
                 html = response.text
-                if "article class=" not in html and 'article.message' not in html:
+                if "article class=" not in html and "article.message" not in html:
                     print(f"Похоже, получена не страница форума (антибот?): {url}")
                     time.sleep(3 * (attempt + 1))
                     continue
@@ -267,10 +276,12 @@ def total_pages(html):
 
 
 def first_date(html):
-    if not html: return ""
+    if not html:
+        return ""
     soup = BeautifulSoup(html, "lxml")
     time_element = soup.select_one("article.message time")
-    if not time_element: return ""
+    if not time_element:
+        return ""
     return (time_element.get("datetime") or "")[:10]
 
 
@@ -339,12 +350,51 @@ def resolve_event_date(text, start, end, post_dt):
 
 def is_weight_of_size(text, start):
     """
-    True, если найденный вес относится именно к навеске рыбы:
-    'навеска 1-2 кг', 'навеска: 2 кг'.
-    Слово «навеска» должно быть ДО числа.
+    True, если вес относится именно к навеске рыбы
+    («навеска 1-2 кг»). Слово «навеска» должно быть ДО числа,
+    иначе потеряется «Запуск 204 кг. Навеска 1.5-3 кг».
     """
     before = text[max(0, start - 45):start].lower()
     return bool(re.search(r"навеск\w*[^0-9]{0,25}$", before, re.I))
+
+
+def build_keyword_index(text):
+    """Все слова запуск/вылов с позициями."""
+    keywords = []
+    for match in STOCK_KW_RX.finditer(text):
+        keywords.append((match.start(), match.end(), "stock"))
+    for match in CATCH_KW_RX.finditer(text):
+        keywords.append((match.start(), match.end(), "catch"))
+    keywords.sort(key=lambda item: item[0])
+    return keywords
+
+
+def keyword_kind_for(text, keywords, start, end):
+    """
+    Определяет, к запуску или вылову относится число.
+    Приоритет — ближайшее слово СЛЕВА («Запуск 101 кг»),
+    потому что в русском языке слово стоит перед числом.
+    Привязка справа — только в пределах одного предложения.
+    """
+    lefts = [k for k in keywords if k[1] <= start]
+    if lefts:
+        kw_start, kw_end, kind = lefts[-1]
+        between = text[kw_end:start]
+        if start - kw_end <= 200 and not BAD_BETWEEN_RX.search(between):
+            return kind
+
+    rights = [k for k in keywords if k[0] >= end]
+    if rights:
+        kw_start, kw_end, kind = rights[0]
+        between = text[end:kw_start]
+        if (
+            kw_start - end <= 200
+            and not SENTENCE_RX.search(between)
+            and not BAD_BETWEEN_RX.search(between)
+        ):
+            return kind
+
+    return None
 
 
 def find_stock_catch(text, post_dt):
@@ -354,12 +404,12 @@ def find_stock_catch(text, post_dt):
 
     results = []
     kg_spans = []
+    keywords = build_keyword_index(text)
 
     for match in KG_RX.finditer(text):
         start, end = match.span()
         kg_spans.append((start, end))
 
-        # Умный фильтр навески (не блокируем вес запуска, если навеска идет ПОСЛЕ)
         if is_weight_of_size(text, start):
             continue
 
@@ -367,32 +417,9 @@ def find_stock_catch(text, post_dt):
         if OTHER_FISH.search(fish_context):
             continue
 
-        window_start = max(0, start - 120)
-        window_end = min(len(text), end + 120)
-        window = text[window_start:window_end]
-
-        has_stock = bool(STOCK_KW_RX.search(window))
-        has_catch = bool(CATCH_KW_RX.search(window))
-
-        if not has_stock and not has_catch:
+        kind = keyword_kind_for(text, keywords, start, end)
+        if kind is None:
             continue
-
-        if has_stock and has_catch:
-            number_center = (start + end) / 2
-            def closest(pattern):
-                best_distance = float("inf")
-                for keyword_match in pattern.finditer(window):
-                    keyword_center = window_start + (keyword_match.start() + keyword_match.end()) / 2
-                    distance = abs(keyword_center - number_center)
-                    if distance < best_distance:
-                        best_distance = distance
-                return best_distance
-
-            kind = "stock" if closest(STOCK_KW_RX) <= closest(CATCH_KW_RX) else "catch"
-        elif has_stock:
-            kind = "stock"
-        else:
-            kind = "catch"
 
         try:
             first_value = float(match.group(1).replace(",", "."))
@@ -416,8 +443,13 @@ def find_stock_catch(text, post_dt):
 
         if kind == "stock":
             forel_context = text[max(0, start - 250):min(len(text), end + 250)]
-            if not FOREL_RX.search(forel_context):
+
+            # Слово «форель» обязательно только если рядом
+            # упомянута другая рыба. Администрация часто пишет
+            # просто «Запуск 101 кг» без слова «форель».
+            if not FOREL_RX.search(forel_context) and OTHER_FISH.search(forel_context):
                 continue
+
             event_date, is_dated = resolve_event_date(text, start, end, post_dt)
             before = text[max(0, start - 60):start].lower()
             if not is_dated and FUTURE_RX.search(before):
@@ -453,7 +485,6 @@ def find_stock_catch(text, post_dt):
             except (TypeError, ValueError):
                 continue
 
-            # Умный фильтр навески
             if is_weight_of_size(text, start):
                 continue
 
@@ -461,12 +492,14 @@ def find_stock_catch(text, post_dt):
             if OTHER_FISH.search(fish_context):
                 continue
 
-            if kind == "stock" and not (30 <= kg <= 20000): continue
-            if kind == "catch" and not (5 <= kg <= 20000): continue
+            if kind == "stock" and not (30 <= kg <= 20000):
+                continue
+            if kind == "catch" and not (5 <= kg <= 20000):
+                continue
 
             if kind == "stock":
                 forel_context = text[max(0, start - 250):min(len(text), end + 250)]
-                if not FOREL_RX.search(forel_context) and not FOREL_RX.search(text):
+                if not FOREL_RX.search(forel_context) and OTHER_FISH.search(forel_context):
                     continue
                 event_date, is_dated = resolve_event_date(text, start, end, post_dt)
                 before = text[max(0, start - 60):start].lower()
@@ -485,6 +518,8 @@ def find_stock_catch(text, post_dt):
                 "pos": start,
             })
 
+    # Если в сообщении найден запуск с указанной датой,
+    # удаляем из этого же сообщения неопределённые запуски.
     dated_stock = [r for r in results if r["kind"] == "stock" and r["is_dated"]]
     if dated_stock:
         results = [r for r in results if not (r["kind"] == "stock" and not r["is_dated"])]
@@ -492,11 +527,114 @@ def find_stock_catch(text, post_dt):
     return results
 
 
+def load_weather():
+    """
+    1) Архив Open-Meteo — вся история с 2024 года.
+    2) Forecast API — последние ~7 дней, потому что архив
+       запаздывает примерно на 5 суток и без него
+       у свежих дней не будет давления и температуры.
+    """
+    weather = {}
+    today = date.today()
+
+    # 1) Архив за весь период.
+    try:
+        response = requests.get(
+            "https://archive-api.open-meteo.com/v1/archive",
+            params={
+                "latitude": 55.82,
+                "longitude": 37.33,
+                "start_date": START_DATE,
+                "end_date": str(today - timedelta(days=5)),
+                "daily": (
+                    "temperature_2m_mean,"
+                    "precipitation_sum,"
+                    "pressure_msl_mean"
+                ),
+                "timezone": "Europe/Moscow",
+            },
+            timeout=60,
+        )
+        daily = response.json().get("daily") or {}
+        temps = daily.get("temperature_2m_mean") or []
+        precips = daily.get("precipitation_sum") or []
+        pressures = daily.get("pressure_msl_mean") or []
+
+        for index, day in enumerate(daily.get("time") or []):
+            pressure_hpa = pressures[index] if index < len(pressures) else None
+            weather[day] = {
+                "temp": temps[index] if index < len(temps) else None,
+                "precip": precips[index] if index < len(precips) else None,
+                "pressure": (
+                    round(pressure_hpa * 0.75006, 1)
+                    if pressure_hpa is not None
+                    else None
+                ),
+            }
+    except Exception as error:
+        print("Архив погоды недоступен:", error)
+
+    # 2) Свежие дни почасово из forecast API.
+    try:
+        response = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": 55.82,
+                "longitude": 37.33,
+                "start_date": str(today - timedelta(days=6)),
+                "end_date": str(today),
+                "hourly": "temperature_2m,precipitation,pressure_msl",
+                "timezone": "Europe/Moscow",
+            },
+            timeout=60,
+        )
+        hourly = response.json().get("hourly") or {}
+        times = hourly.get("time") or []
+        temps = hourly.get("temperature_2m") or []
+        precips = hourly.get("precipitation") or []
+        pressures = hourly.get("pressure_msl") or []
+
+        buckets = defaultdict(list)
+        for index, stamp in enumerate(times):
+            buckets[stamp[:10]].append(index)
+
+        for day, indexes in buckets.items():
+            day_temps = [
+                temps[i] for i in indexes
+                if i < len(temps) and temps[i] is not None
+            ]
+            day_precips = [
+                precips[i] for i in indexes
+                if i < len(precips) and precips[i] is not None
+            ]
+            day_pressures = [
+                pressures[i] for i in indexes
+                if i < len(pressures) and pressures[i] is not None
+            ]
+
+            record = weather.get(day) or {}
+
+            if day_temps and record.get("temp") is None:
+                record["temp"] = round(sum(day_temps) / len(day_temps), 1)
+            if day_precips and record.get("precip") is None:
+                record["precip"] = round(sum(day_precips), 1)
+            if day_pressures and record.get("pressure") is None:
+                record["pressure"] = round(
+                    sum(day_pressures) / len(day_pressures) * 0.75006,
+                    1,
+                )
+
+            weather[day] = record
+    except Exception as error:
+        print("Свежая погода недоступна:", error)
+
+    return weather
+
+
 def main():
     os.makedirs(PAGES_DIR, exist_ok=True)
     database = sqlite3.connect(DB_FILE)
 
-    # Используем CREATE TABLE IF NOT EXISTS вместо DROP TABLE
     database.execute(
         """
         CREATE TABLE IF NOT EXISTS posts (
@@ -572,7 +710,7 @@ def main():
                 json.dump(posts, file, ensure_ascii=False)
 
             print(f" {index + 1}/{len(pages_to_download)} стр.{page_number}: {len(posts)} постов")
-        
+
         time.sleep(random.uniform(1.5, 2.5))
 
         if (index + 1) % 20 == 0:
@@ -588,7 +726,6 @@ def main():
 
             for post in posts:
                 post_datetime = post.get("post_dt") or post.get("post_date") or ""
-                # Обновляем старые записи, если они изменились
                 database.execute(
                     """
                     INSERT OR REPLACE INTO posts
@@ -686,30 +823,7 @@ def build(database, state, last_page):
     for event_day, record in day_catch.items():
         day_events.setdefault(event_day, {})["catch"] = record
 
-    weather = {}
-    try:
-        weather_response = requests.get(
-            "https://archive-api.open-meteo.com/v1/archive",
-            params={
-                "latitude": 55.82,
-                "longitude": 37.33,
-                "start_date": START_DATE,
-                "end_date": str(date.today() - timedelta(days=5)),
-                "daily": "temperature_2m_mean,precipitation_sum,pressure_msl_mean",
-                "timezone": "Europe/Moscow",
-            },
-            timeout=30,
-        )
-        weather_data = weather_response.json()["daily"]
-        for index, weather_day in enumerate(weather_data["time"]):
-            pressure = weather_data["pressure_msl_mean"][index]
-            weather[weather_day] = {
-                "temp": weather_data["temperature_2m_mean"][index],
-                "precip": weather_data["precipitation_sum"][index],
-                "pressure": round(pressure * 0.75006, 1) if pressure is not None else None,
-            }
-    except Exception as error:
-        print("Погода недоступна:", error)
+    weather = load_weather()
 
     monthly_activity = defaultdict(list)
     pressure_activity = {"<745": [], "745-760": [], ">760": []}
@@ -718,12 +832,16 @@ def build(database, state, last_page):
         monthly_activity[day_value[:7]].append(len(urls))
         pressure = (weather.get(day_value) or {}).get("pressure")
         if pressure is not None:
-            if pressure < 745: group = "<745"
-            elif pressure <= 760: group = "745-760"
-            else: group = ">760"
+            if pressure < 745:
+                group = "<745"
+            elif pressure <= 760:
+                group = "745-760"
+            else:
+                group = ">760"
             pressure_activity[group].append(len(urls))
 
-    def average(values): return round(sum(values) / len(values), 2) if values else 0
+    def average(values):
+        return round(sum(values) / len(values), 2) if values else 0
 
     collected_pages = len(glob.glob(f"{PAGES_DIR}/*.json"))
     needed_pages = state.get("newest", last_page) - state.get("start_page", last_page) + 1
@@ -771,7 +889,8 @@ def build(database, state, last_page):
             total_stocked += stocked
             total_caught += caught
             remaining = max(0, remaining + stocked - caught)
-            if stocked: last_stock_day = day_string
+            if stocked:
+                last_stock_day = day_string
 
             balance_dates.append(day_string)
             balance_stocked.append(stocked)
@@ -810,7 +929,11 @@ def build(database, state, last_page):
         "events": events,
     }
 
-    payload = json.dumps({"stats": statistics, "table": table, "balance": balance}, ensure_ascii=False).replace("</", "<\\/")
+    payload = json.dumps(
+        {"stats": statistics, "table": table, "balance": balance},
+        ensure_ascii=False,
+    ).replace("</", "<\\/")
+
     final_html = TEMPLATE.replace("__DATA__", payload)
 
     with open("index.html", "w", encoding="utf-8") as file:
