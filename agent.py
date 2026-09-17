@@ -1,503 +1,1728 @@
-import os, re, json, time, random
+import os
+import re
+import json
+import time
+import random
 from collections import defaultdict
 from datetime import date, timedelta
+
 from curl_cffi import requests
 from bs4 import BeautifulSoup
 
+
 THREAD = "https://www.rusfishing.ru/forum/threads/rybalka-v-krasnogorske.32280"
+
 START_DATE = "2024-01-01"
 BALANCE_START = "2026-09-01"
-ADMIN_AUTHORS = []
+
+# Учитываем запуски и официальные выловы только от администрации.
+ADMIN_AUTHORS = [
+    "Александр SALMO",
+    "Митяй-Митинооо",
+]
+
 BATCH = 150
-REFRESH_TAIL = 100
+
+# Обновляем последние 15 страниц форума при каждом запуске.
+REFRESH_TAIL = 15
+
 
 FOREL_RX = re.compile(r"форел", re.I)
-OTHER_FISH = re.compile(r"осет|осётр|карп|сом\b|щук|белуг|стерляд|карас|окун|судак|сиг\b|налим|амур|толстолоб|линь", re.I)
-DATE_RX = re.compile(r"(?<!\d)(\d{1,2})\.(\d{2})(?:\.(\d{2,4}))?(?!\d)")
-KG_RX = re.compile(r"(\d+(?:[.,]\d+)?)(?:\s*[-–—]\s*(\d+(?:[.,]\d+)?))?\s*(кг|килограмм\w*|тонн\w*|т)\b", re.I)
-STOCK_KW_RX = re.compile(r"запуск|запустили|зарыбление|зарыбили|завезли|завоз|выпустили", re.I)
-CATCH_KW_RX = re.compile(r"вылов\w*|итог дня|итого", re.I)
-FUTURE_RX = re.compile(r"сделаем|будет|будут|планиру|анонс|ожидается|собираемся|намечает", re.I)
+
+OTHER_FISH = re.compile(
+    r"осет|осётр|карп|сом\b|щук|белуг|стерляд|карас|"
+    r"окун|судак|сиг\b|налим|амур|толстолоб|линь",
+    re.I,
+)
+
+DATE_RX = re.compile(
+    r"(?<!\d)(\d{1,2})\.(\d{2})(?:\.(\d{2,4}))?(?!\d)"
+)
+
+KG_RX = re.compile(
+    r"(\d+(?:[.,]\d+)?)"
+    r"(?:\s*[-–—]\s*(\d+(?:[.,]\d+)?))?"
+    r"\s*(кг|килограмм\w*|тонн\w*|т)\b",
+    re.I,
+)
+
+STOCK_KW_RX = re.compile(
+    r"запуск|запустили|зарыбление|зарыбили|"
+    r"завезли|завоз|выпустили",
+    re.I,
+)
+
+CATCH_KW_RX = re.compile(
+    r"вылов\w*|итог дня|итого",
+    re.I,
+)
+
+FUTURE_RX = re.compile(
+    r"сделаем|будет|будут|планиру|анонс|"
+    r"ожидается|собираемся|намечает",
+    re.I,
+)
+
 NABECKA_RX = re.compile(r"навеска", re.I)
-STOCK_NOUNIT_RX = re.compile(r"(запуск\w*|запустили|зарыбление\w*)\s*[:\-–—]?\s*(\d{2,4})\b", re.I)
-CATCH_NOUNIT_RX = re.compile(r"(вылов\w*|итог\w*)\s*[:\-–—]?\s*(\d{1,4})\b", re.I)
+
+STOCK_NOUNIT_RX = re.compile(
+    r"(запуск\w*|запустили|зарыбление\w*)"
+    r"\s*[:\-–—]?\s*(\d{2,4})\b",
+    re.I,
+)
+
+CATCH_NOUNIT_RX = re.compile(
+    r"(вылов\w*|итог\w*)"
+    r"\s*[:\-–—]?\s*(\d{1,4})\b",
+    re.I,
+)
+
 
 TEMPLATE = """<!DOCTYPE html>
-<html lang="ru"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
 <title>Форель Красногорск</title>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
 <style>
-body{font-family:system-ui,-apple-system,sans-serif;margin:0 auto;padding:12px;background:#0f172a;color:#e2e8f0;max-width:820px}
-h1{font-size:1.4rem;background:linear-gradient(90deg,#38bdf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.card{background:#1e293b;border-radius:14px;padding:14px;margin:10px 0}
-.big{font-size:1.8rem;font-weight:800;color:#fbbf24}
-table{width:100%;border-collapse:collapse;font-size:.8rem}
-td,th{padding:6px 4px;border-bottom:1px solid #334155;text-align:left;vertical-align:top}
-a{color:#7dd3fc;text-decoration:none}
-.note{font-size:.8rem;color:#94a3b8}
-.q{color:#94a3b8;font-size:.75rem}
-</style></head><body>
+body{
+    font-family:system-ui,-apple-system,sans-serif;
+    margin:0 auto;
+    padding:12px;
+    background:#0f172a;
+    color:#e2e8f0;
+    max-width:820px
+}
+
+h1{
+    font-size:1.4rem;
+    background:linear-gradient(90deg,#38bdf8,#a78bfa);
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent
+}
+
+.card{
+    background:#1e293b;
+    border-radius:14px;
+    padding:14px;
+    margin:10px 0
+}
+
+.big{
+    font-size:1.8rem;
+    font-weight:800;
+    color:#fbbf24
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:.8rem
+}
+
+td,th{
+    padding:6px 4px;
+    border-bottom:1px solid #334155;
+    text-align:left;
+    vertical-align:top
+}
+
+a{
+    color:#7dd3fc;
+    text-decoration:none
+}
+
+a:hover{
+    text-decoration:underline
+}
+
+.note{
+    font-size:.8rem;
+    color:#94a3b8
+}
+
+.q{
+    color:#94a3b8;
+    font-size:.75rem
+}
+</style>
+</head>
+
+<body>
+
 <h1>🎣 Форель в Красногорске</h1>
+
+<div class="card">
+  <h2>🎟 Условия рыбалки</h2>
+
+  <table>
+    <tr>
+      <td>06:00–19:00</td>
+      <td><b>4000 ₽</b></td>
+    </tr>
+    <tr>
+      <td>12:00–19:00</td>
+      <td><b>2200 ₽</b></td>
+    </tr>
+    <tr>
+      <td>18:00–06:00</td>
+      <td><b>4000 ₽</b></td>
+    </tr>
+    <tr>
+      <td>Сутки</td>
+      <td><b>5000 ₽</b></td>
+    </tr>
+    <tr>
+      <td>Приоритетный час</td>
+      <td><b>300 ₽</b></td>
+    </tr>
+    <tr>
+      <td>Дополнительная снасть</td>
+      <td><b>500 ₽</b></td>
+    </tr>
+  </table>
+
+  <p>
+    🎣 Разрешено ловить на две снасти, не более двух крючков на каждой.<br>
+    👩 Женщина и ребёнок до 13 лет ловят бесплатно на снасти рыбака.<br>
+    🐟 Нормы вылова нет.<br>
+    ✅ Спиннинг разрешён.<br>
+    ⛔ Пеллетс и блёсны с тройниками запрещены.
+  </p>
+
+  <p>
+    <b>Координаты:</b>
+    <a
+      href="https://yandex.ru/maps/?pt=37.322979,55.840619&z=15&l=map"
+      target="_blank"
+      rel="noopener"
+    >
+      55.840619, 37.322979
+    </a>
+    <br>
+
+    <b>Телефон администрации:</b>
+    <a href="tel:+79852620637">+7 985 262-06-37</a>
+  </p>
+
+  <div class="note">
+    Проверено по сообщению администрации от 13.09.2026.
+    Перед поездкой рекомендуется уточнить условия.
+  </div>
+</div>
+
 <h2>🐟 Остаток форели в водоёме</h2>
-<div class="card"><div class="big" id="rem">—</div>
-<div class="note">запущено <b id="st">0</b> кг − выловлено <b id="ct">0</b> кг • отсчёт с <span id="bs"></span><br>
-последний запуск: <span id="dsl">—</span> • обновлено <span id="upd2"></span></div></div>
-<div class="card" id="balbox"><canvas id="bal"></canvas></div>
+
+<div class="card">
+  <div class="big" id="rem">—</div>
+
+  <div class="note">
+    запущено <b id="st">0</b> кг −
+    выловлено <b id="ct">0</b> кг •
+    отсчёт с <span id="bs"></span>
+    <br>
+
+    последний запуск:
+    <span id="dsl">—</span> •
+    обновлено <span id="upd2"></span>
+  </div>
+</div>
+
+<div class="card" id="balbox">
+  <canvas id="bal"></canvas>
+</div>
+
 <h3>Журнал запусков и выловов</h3>
-<div class="card"><table id="ev"></table></div>
-<div class="note">Дата в таблице = дата события (из текста), а не дата поста. Анонсы будущих запусков относятся на их дату. Если в день события есть подтверждение — берётся оно, анонс отбрасывается.</div>
+
+<div class="card">
+  <table id="ev"></table>
+</div>
+
+<div class="note">
+  Дата в таблице = дата события из текста, а не дата поста.
+  Анонсы будущих запусков относятся на их дату.
+  Если в день события есть подтверждение — берётся оно,
+  а анонс отбрасывается.
+</div>
+
 <h2>📊 Активность обсуждений с 2024</h2>
-<div class="card"><div class="note" id="prog"></div><div class="big" style="color:#38bdf8" id="total">0</div>
-<div class="note">постов про форель за <span id="days">0</span> активных дней</div></div>
-<h3>Активность по месяцам (постов/день)</h3><div class="card"><canvas id="m"></canvas></div>
-<h3>Клёв vs давление</h3><div class="card"><canvas id="p"></canvas></div>
-<h3>Последние активные дни</h3><div class="card"><table id="t"></table></div>
+
+<div class="card">
+  <div class="note" id="prog"></div>
+
+  <div class="big" style="color:#38bdf8" id="total">0</div>
+
+  <div class="note">
+    постов про форель за
+    <span id="days">0</span> активных дней
+  </div>
+</div>
+
+<h3>Активность по месяцам (постов/день)</h3>
+
+<div class="card">
+  <canvas id="m"></canvas>
+</div>
+
+<h3>Клёв vs давление</h3>
+
+<div class="card">
+  <canvas id="p"></canvas>
+</div>
+
+<h3>Последние активные дни</h3>
+
+<div class="card">
+  <table id="t"></table>
+</div>
+
 <script>
 try {
-const D=__DATA__;
-const B=D.balance||{};
-document.getElementById('bs').textContent=B.start||'2026-09-01';
-document.getElementById('st').textContent=B.total_stocked||0;
-document.getElementById('ct').textContent=B.total_caught||0;
-document.getElementById('rem').textContent=(B.events&&B.events.length)?('≈ '+(B.remaining||0)+' кг'):'Ожидание 01.09.2026';
-document.getElementById('dsl').textContent=(B.days_since_stock!==null&&B.days_since_stock!==undefined)?(B.days_since_stock+' дн. назад'):'нет данных';
-document.getElementById('upd2').textContent=(D.stats&&D.stats.updated)||'';
-if(B.series&&B.series.dates&&B.series.dates.length>0){
-new Chart(document.getElementById('bal'),{data:{labels:B.series.dates,datasets:[
-{type:'line',label:'Остаток кг',data:B.series.remaining,borderColor:'#fbbf24',tension:0.3,pointRadius:0,borderWidth:2},
-{type:'bar',label:'Запуск',data:B.series.stocked,backgroundColor:'#4ade80'},
-{type:'bar',label:'Вылов',data:B.series.caught,backgroundColor:'#f87171'}]},
-options:{plugins:{legend:{labels:{color:'#e2e8f0',boxWidth:12}}},scales:{x:{ticks:{maxTicksLimit:8,color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}}}});
-}else{
-document.getElementById('balbox').innerHTML='<div class="note">Отчёты появятся начиная с '+(B.start||'2026-09-01')+'.</div>';
-}
-if(B.events&&B.events.length>0){
-document.getElementById('ev').innerHTML='<tr><th>Дата</th><th></th><th>кг</th><th>Цитата</th></tr>'+
-B.events.map(e=>`<tr><td>${e.day}</td><td>${e.type==='запуск'?'🟢':'🔴'}</td><td><b>${e.kg}</b></td><td class="q"><a href="${e.url}" target="_blank">${e.quote}</a></td></tr>`).join('');
-}else{
-document.getElementById('ev').innerHTML='<tr><td class="note">Пока нет записей.</td></tr>';
-}
-if(D.stats){
-document.getElementById('prog').textContent='Собрано страниц: '+(D.stats.collected||0)+' из ~'+(D.stats.need||0)+' ('+(D.stats.pct||0)+'%)';
-document.getElementById('total').textContent=D.stats.total_posts||0;
-document.getElementById('days').textContent=D.stats.active_days||0;
-if(D.stats.monthly&&Object.keys(D.stats.monthly).length>0){
-new Chart(document.getElementById('m'),{type:'bar',data:{labels:Object.keys(D.stats.monthly),datasets:[{data:Object.values(D.stats.monthly),backgroundColor:'#38bdf8'}]},options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}}}});
-}
-if(D.stats.pressure&&Object.keys(D.stats.pressure).length>0){
-new Chart(document.getElementById('p'),{type:'bar',data:{labels:Object.keys(D.stats.pressure),datasets:[{data:Object.values(D.stats.pressure),backgroundColor:'#4ade80'}]},options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}}}});
-}
-}
-if(D.table&&D.table.length>0){
-document.getElementById('t').innerHTML='<tr><th>Дата</th><th>П</th><th>t°</th><th>Давл</th><th>Осадки</th><th></th></tr>'+
-D.table.map(r=>`<tr><td>${r.day}</td><td>${r.posts}</td><td>${r.temp??'—'}</td><td>${r.pressure??'—'}</td><td>${r.precip??'—'}</td><td>${(r.links||[]).map((u,i)=>`<a href="${u}" target="_blank">#${i+1}</a>`).join(' ')}</td></tr>`).join('');
-}
-}catch(err){console.error(err);}
-</script></body></html>"""
+    const D = __DATA__;
+    const B = D.balance || {};
 
-def page_url(p):
-    return THREAD if p == 1 else f"{THREAD}/page-{p}"
+    document.getElementById('bs').textContent =
+        B.start || '2026-09-01';
+
+    document.getElementById('st').textContent =
+        B.total_stocked || 0;
+
+    document.getElementById('ct').textContent =
+        B.total_caught || 0;
+
+    document.getElementById('rem').textContent =
+        (B.events && B.events.length)
+            ? ('≈ ' + (B.remaining || 0) + ' кг')
+            : 'Ожидание 01.09.2026';
+
+    document.getElementById('dsl').textContent =
+        (
+            B.days_since_stock !== null &&
+            B.days_since_stock !== undefined
+        )
+            ? (B.days_since_stock + ' дн. назад')
+            : 'нет данных';
+
+    document.getElementById('upd2').textContent =
+        (D.stats && D.stats.updated) || '';
+
+    if (
+        B.series &&
+        B.series.dates &&
+        B.series.dates.length > 0
+    ) {
+        new Chart(
+            document.getElementById('bal'),
+            {
+                data: {
+                    labels: B.series.dates,
+                    datasets: [
+                        {
+                            type: 'line',
+                            label: 'Остаток кг',
+                            data: B.series.remaining,
+                            borderColor: '#fbbf24',
+                            tension: 0.3,
+                            pointRadius: 0,
+                            borderWidth: 2
+                        },
+                        {
+                            type: 'bar',
+                            label: 'Запуск',
+                            data: B.series.stocked,
+                            backgroundColor: '#4ade80'
+                        },
+                        {
+                            type: 'bar',
+                            label: 'Вылов',
+                            data: B.series.caught,
+                            backgroundColor: '#f87171'
+                        }
+                    ]
+                },
+                options: {
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#e2e8f0',
+                                boxWidth: 12
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                maxTicksLimit: 8,
+                                color: '#94a3b8'
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                color: '#94a3b8'
+                            }
+                        }
+                    }
+                }
+            }
+        );
+    } else {
+        document.getElementById('balbox').innerHTML =
+            '<div class="note">Отчёты появятся начиная с ' +
+            (B.start || '2026-09-01') +
+            '.</div>';
+    }
+
+    if (B.events && B.events.length > 0) {
+        document.getElementById('ev').innerHTML =
+            '<tr>' +
+            '<th>Дата</th>' +
+            '<th></th>' +
+            '<th>кг</th>' +
+            '<th>Цитата</th>' +
+            '</tr>' +
+            B.events.map(e =>
+                `<tr>
+                    <td>${e.day}</td>
+                    <td>${e.type === 'запуск' ? '🟢' : '🔴'}</td>
+                    <td><b>${e.kg}</b></td>
+                    <td class="q">
+                        <a
+                          href="${e.url}"
+                          target="_blank"
+                          rel="noopener"
+                        >${e.quote}</a>
+                    </td>
+                </tr>`
+            ).join('');
+    } else {
+        document.getElementById('ev').innerHTML =
+            '<tr><td class="note">Пока нет записей.</td></tr>';
+    }
+
+    if (D.stats) {
+        document.getElementById('prog').textContent =
+            'Собрано страниц: ' +
+            (D.stats.collected || 0) +
+            ' из ~' +
+            (D.stats.need || 0) +
+            ' (' +
+            (D.stats.pct || 0) +
+            '%)';
+
+        document.getElementById('total').textContent =
+            D.stats.total_posts || 0;
+
+        document.getElementById('days').textContent =
+            D.stats.active_days || 0;
+
+        if (
+            D.stats.monthly &&
+            Object.keys(D.stats.monthly).length > 0
+        ) {
+            new Chart(
+                document.getElementById('m'),
+                {
+                    type: 'bar',
+                    data: {
+                        labels: Object.keys(D.stats.monthly),
+                        datasets: [
+                            {
+                                data: Object.values(D.stats.monthly),
+                                backgroundColor: '#38bdf8'
+                            }
+                        ]
+                    },
+                    options: {
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    color: '#94a3b8'
+                                }
+                            },
+                            y: {
+                                ticks: {
+                                    color: '#94a3b8'
+                                }
+                            }
+                        }
+                    }
+                }
+            );
+        }
+
+        if (
+            D.stats.pressure &&
+            Object.keys(D.stats.pressure).length > 0
+        ) {
+            new Chart(
+                document.getElementById('p'),
+                {
+                    type: 'bar',
+                    data: {
+                        labels: Object.keys(D.stats.pressure),
+                        datasets: [
+                            {
+                                data: Object.values(D.stats.pressure),
+                                backgroundColor: '#4ade80'
+                            }
+                        ]
+                    },
+                    options: {
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    color: '#94a3b8'
+                                }
+                            },
+                            y: {
+                                ticks: {
+                                    color: '#94a3b8'
+                                }
+                            }
+                        }
+                    }
+                }
+            );
+        }
+    }
+
+    if (D.table && D.table.length > 0) {
+        document.getElementById('t').innerHTML =
+            '<tr>' +
+            '<th>Дата</th>' +
+            '<th>П</th>' +
+            '<th>t°</th>' +
+            '<th>Давл</th>' +
+            '<th>Осадки</th>' +
+            '<th></th>' +
+            '</tr>' +
+            D.table.map(r =>
+                `<tr>
+                    <td>${r.day}</td>
+                    <td>${r.posts}</td>
+                    <td>${r.temp ?? '—'}</td>
+                    <td>${r.pressure ?? '—'}</td>
+                    <td>${r.precip ?? '—'}</td>
+                    <td>
+                        ${(r.links || []).map(
+                            (u, i) =>
+                                `<a
+                                  href="${u}"
+                                  target="_blank"
+                                  rel="noopener"
+                                >#${i + 1}</a>`
+                        ).join(' ')}
+                    </td>
+                </tr>`
+            ).join('');
+    }
+} catch (err) {
+    console.error(err);
+}
+</script>
+
+</body>
+</html>"""
+
+
+def page_url(page_number):
+    if page_number == 1:
+        return THREAD
+
+    return f"{THREAD}/page-{page_number}"
+
 
 def fetch(url, tries=3):
-    for i in range(tries):
+    for attempt in range(tries):
         try:
-            r = requests.get(url, impersonate="chrome120", timeout=25)
-            if r.status_code == 200:
-                return r.text
-            print(f"Status {r.status_code} on {url}")
-        except Exception as e:
-            print(f"Retry {i+1}: {e}")
-        time.sleep(3*(i+1))
+            response = requests.get(
+                url,
+                impersonate="chrome120",
+                timeout=25,
+            )
+
+            if response.status_code == 200:
+                return response.text
+
+            print(f"Status {response.status_code} on {url}")
+
+        except Exception as error:
+            print(f"Retry {attempt + 1}: {error}")
+
+        time.sleep(3 * (attempt + 1))
+
     return None
+
 
 def parse_posts(html, page):
     soup = BeautifulSoup(html, "lxml")
-    out = []
-    for msg in soup.select("article.message"):
-        raw = msg.get("id", "")
-        m = re.search(r"(\d+)", raw)
-        pid = m.group(1) if m else f"p{page}_{len(out)}"
-        t = msg.select_one("time")
-        b = msg.select_one(".bbWrapper")
-        if not b:
+    posts = []
+
+    for message in soup.select("article.message"):
+        raw_id = message.get("id", "")
+        id_match = re.search(r"(\d+)", raw_id)
+
+        post_id = (
+            id_match.group(1)
+            if id_match
+            else f"p{page}_{len(posts)}"
+        )
+
+        time_element = message.select_one("time")
+        body = message.select_one(".bbWrapper")
+
+        if not body:
             continue
-        for q in b.select("blockquote"):
-            q.decompose()
-        out.append({"post_id": pid, "page": page,
-            "author": msg.get("data-author", ""),
-            "post_dt": (t.get("datetime") or "") if t else "",
-            "text": b.get_text("\n", strip=True)})
-    return out
+
+        # Удаляем цитаты из текста сообщения, чтобы не считать
+        # повторно чужие запуски и выловы.
+        for quote in body.select("blockquote"):
+            quote.decompose()
+
+        posts.append(
+            {
+                "post_id": post_id,
+                "page": page,
+                "author": message.get("data-author", ""),
+                "post_dt": (
+                    time_element.get("datetime") or ""
+                    if time_element
+                    else ""
+                ),
+                "text": body.get_text("\n", strip=True),
+            }
+        )
+
+    return posts
+
 
 def total_pages(html):
     soup = BeautifulSoup(html, "lxml")
-    nav = soup.select_one(".pageNav")
-    if nav and nav.get("data-last"):
+    navigation = soup.select_one(".pageNav")
+
+    if navigation and navigation.get("data-last"):
         try:
-            return int(nav["data-last"])
-        except:
+            return int(navigation["data-last"])
+        except (TypeError, ValueError):
             pass
-    nums = []
-    for a in soup.select(".pageNav a"):
-        tt = a.get_text(strip=True).replace(" ", "")
-        if tt.isdigit():
-            nums.append(int(tt))
-    return max(nums) if nums else 10451
+
+    numbers = []
+
+    for link in soup.select(".pageNav a"):
+        text = link.get_text(strip=True).replace(" ", "")
+
+        if text.isdigit():
+            numbers.append(int(text))
+
+    return max(numbers) if numbers else 10451
+
 
 def first_date(html):
     if not html:
         return ""
+
     soup = BeautifulSoup(html, "lxml")
-    t = soup.select_one("article.message time")
-    return (t.get("datetime") or "")[:10] if t else ""
+    time_element = soup.select_one("article.message time")
+
+    if not time_element:
+        return ""
+
+    return (time_element.get("datetime") or "")[:10]
+
 
 def load_state():
-    if os.path.exists("state.json"):
-        try:
-            return json.load(open("state.json", encoding="utf-8"))
-        except:
-            return {}
-    return {}
+    if not os.path.exists("state.json"):
+        return {}
 
-def snippet(text, pos, width=80):
-    a = max(0, pos-15)
-    b = min(len(text), pos+width)
-    return "…" + re.sub(r"\s+", " ", text[a:b]).strip() + "…"
+    try:
+        with open("state.json", encoding="utf-8") as file:
+            return json.load(file)
+    except Exception:
+        return {}
 
-def resolve_event_date(text, s, e, post_dt):
+
+def snippet(text, position, width=80):
+    start = max(0, position - 15)
+    end = min(len(text), position + width)
+
+    clean_text = re.sub(
+        r"\s+",
+        " ",
+        text[start:end],
+    ).strip()
+
+    return "…" + clean_text + "…"
+
+
+def resolve_event_date(text, start, end, post_dt):
     post_date = (post_dt or "")[:10]
+
     try:
         post_year = int(post_date[:4])
-    except:
+    except (TypeError, ValueError):
         post_year = date.today().year
-    line_start = text.rfind("\n", 0, s)
-    line_start = 0 if line_start == -1 else line_start+1
-    line_end = text.find("\n", e)
+
+    line_start = text.rfind("\n", 0, start)
+    line_start = 0 if line_start == -1 else line_start + 1
+
+    line_end = text.find("\n", end)
     if line_end == -1:
         line_end = len(text)
+
     line = text[line_start:line_end]
-    for scope in (line, text[max(0,s-40):min(len(text),e+40)]):
-        m = DATE_RX.search(scope)
-        if m:
-            try:
-                d = int(m.group(1)); mo = int(m.group(2))
-                yraw = m.group(3)
-                if yraw:
-                    if len(yraw) == 2:
-                        yy = int(yraw)
-                        y = 2000+yy if yy < 50 else 1900+yy
-                    else:
-                        y = int(yraw)
+
+    scopes = (
+        line,
+        text[max(0, start - 40):min(len(text), end + 40)],
+    )
+
+    for scope in scopes:
+        match = DATE_RX.search(scope)
+
+        if not match:
+            continue
+
+        try:
+            day_number = int(match.group(1))
+            month_number = int(match.group(2))
+            raw_year = match.group(3)
+
+            if raw_year:
+                if len(raw_year) == 2:
+                    short_year = int(raw_year)
+                    year = (
+                        2000 + short_year
+                        if short_year < 50
+                        else 1900 + short_year
+                    )
                 else:
-                    y = post_year
-                if 1 <= d <= 31 and 1 <= mo <= 12:
-                    return f"{y:04d}-{mo:02d}-{d:02d}", True
-            except:
-                pass
+                    year = int(raw_year)
+            else:
+                year = post_year
+
+            if 1 <= day_number <= 31 and 1 <= month_number <= 12:
+                return (
+                    f"{year:04d}-{month_number:02d}-{day_number:02d}",
+                    True,
+                )
+
+        except (TypeError, ValueError):
+            pass
+
     if "завтра" in line.lower():
         try:
-            pd = date.fromisoformat(post_date)
-            return str(pd+timedelta(days=1)), True
-        except:
+            parsed_post_date = date.fromisoformat(post_date)
+
+            return (
+                str(parsed_post_date + timedelta(days=1)),
+                True,
+            )
+        except (TypeError, ValueError):
             pass
+
     return post_date, False
+
 
 def find_stock_catch(text, post_dt):
     post_date = (post_dt or "")[:10]
+
     if not text:
         return []
+
     results = []
     kg_spans = []
-    for m in KG_RX.finditer(text):
-        s, e = m.span()
-        kg_spans.append((s, e))
-        ctx60 = text[max(0,s-60):min(len(text),e+60)]
-        if NABECKA_RX.search(ctx60):
+
+    for match in KG_RX.finditer(text):
+        start, end = match.span()
+        kg_spans.append((start, end))
+
+        context_60 = text[
+            max(0, start - 60):
+            min(len(text), end + 60)
+        ]
+
+        if NABECKA_RX.search(context_60):
             continue
-        if OTHER_FISH.search(text[max(0,s-50):min(len(text),e+50)]):
+
+        fish_context = text[
+            max(0, start - 50):
+            min(len(text), end + 50)
+        ]
+
+        if OTHER_FISH.search(fish_context):
             continue
-        win_a = max(0,s-120); win_b = min(len(text),e+120)
-        win = text[win_a:win_b]
-        has_stock = bool(STOCK_KW_RX.search(win))
-        has_catch = bool(CATCH_KW_RX.search(win))
+
+        window_start = max(0, start - 120)
+        window_end = min(len(text), end + 120)
+        window = text[window_start:window_end]
+
+        has_stock = bool(STOCK_KW_RX.search(window))
+        has_catch = bool(CATCH_KW_RX.search(window))
+
         if not has_stock and not has_catch:
             continue
+
         if has_stock and has_catch:
-            num_c = (s+e)/2
-            def closest(pat):
-                best = 1e9
-                for km in pat.finditer(win):
-                    kc = win_a + (km.start()+km.end())/2
-                    dd = abs(kc-num_c)
-                    if dd < best:
-                        best = dd
-                return best
-            kind = "stock" if closest(STOCK_KW_RX) <= closest(CATCH_KW_RX) else "catch"
+            number_center = (start + end) / 2
+
+            def closest(pattern):
+                best_distance = float("inf")
+
+                for keyword_match in pattern.finditer(window):
+                    keyword_center = (
+                        window_start +
+                        (
+                            keyword_match.start() +
+                            keyword_match.end()
+                        ) / 2
+                    )
+
+                    distance = abs(keyword_center - number_center)
+
+                    if distance < best_distance:
+                        best_distance = distance
+
+                return best_distance
+
+            kind = (
+                "stock"
+                if closest(STOCK_KW_RX) <= closest(CATCH_KW_RX)
+                else "catch"
+            )
+
         elif has_stock:
             kind = "stock"
+
         else:
             kind = "catch"
+
         try:
-            n1 = float(m.group(1).replace(",", "."))
-            n2raw = m.group(2)
-            val = (n1+float(n2raw.replace(",", ".")))/2 if n2raw else n1
-            unit = (m.group(3) or "").lower()
+            first_value = float(
+                match.group(1).replace(",", ".")
+            )
+
+            second_raw = match.group(2)
+
+            if second_raw:
+                second_value = float(
+                    second_raw.replace(",", ".")
+                )
+                value = (first_value + second_value) / 2
+            else:
+                value = first_value
+
+            unit = (match.group(3) or "").lower()
+
             if unit.startswith("тон") or unit == "т":
-                val *= 1000
-            kg = int(round(val))
-        except:
+                value *= 1000
+
+            kg = int(round(value))
+
+        except (TypeError, ValueError):
             continue
+
         if kind == "stock" and not (30 <= kg <= 20000):
             continue
+
         if kind == "catch" and not (5 <= kg <= 20000):
             continue
+
         if kind == "stock":
-            if not FOREL_RX.search(text[max(0,s-250):min(len(text),e+250)]):
+            forel_context = text[
+                max(0, start - 250):
+                min(len(text), end + 250)
+            ]
+
+            if not FOREL_RX.search(forel_context):
                 continue
-            ev_date, is_dated = resolve_event_date(text, s, e, post_dt)
-            before = text[max(0,s-60):s].lower()
+
+            event_date, is_dated = resolve_event_date(
+                text,
+                start,
+                end,
+                post_dt,
+            )
+
+            before = text[max(0, start - 60):start].lower()
+
+            # Не добавляем неопределённый будущий анонс,
+            # если для него не удалось определить дату.
             if not is_dated and FUTURE_RX.search(before):
                 continue
+
         else:
-            ev_date, is_dated = post_date, False
-        results.append({"kind": kind, "kg": kg, "event_date": ev_date, "is_dated": is_dated, "quote": snippet(text, s), "pos": s})
-    def overlap(s, e):
-        for a, b in kg_spans:
-            if not (e < a or s > b):
+            event_date = post_date
+            is_dated = False
+
+        results.append(
+            {
+                "kind": kind,
+                "kg": kg,
+                "event_date": event_date,
+                "is_dated": is_dated,
+                "quote": snippet(text, start),
+                "pos": start,
+            }
+        )
+
+    def overlaps_existing_kg(start, end):
+        for kg_start, kg_end in kg_spans:
+            if not (end < kg_start or start > kg_end):
                 return True
+
         return False
-    for pat, kind in [(STOCK_NOUNIT_RX, "stock"), (CATCH_NOUNIT_RX, "catch")]:
-        for m in pat.finditer(text):
-            s, e = m.span()
-            if overlap(s, e):
+
+    patterns = [
+        (STOCK_NOUNIT_RX, "stock"),
+        (CATCH_NOUNIT_RX, "catch"),
+    ]
+
+    for pattern, kind in patterns:
+        for match in pattern.finditer(text):
+            start, end = match.span()
+
+            if overlaps_existing_kg(start, end):
                 continue
+
             try:
-                kg = int(m.group(2))
-            except:
+                kg = int(match.group(2))
+            except (TypeError, ValueError):
                 continue
-            ctx60 = text[max(0,s-60):min(len(text),e+60)]
-            if NABECKA_RX.search(ctx60):
+
+            context_60 = text[
+                max(0, start - 60):
+                min(len(text), end + 60)
+            ]
+
+            if NABECKA_RX.search(context_60):
                 continue
-            if OTHER_FISH.search(text[max(0,s-50):min(len(text),e+50)]):
+
+            fish_context = text[
+                max(0, start - 50):
+                min(len(text), end + 50)
+            ]
+
+            if OTHER_FISH.search(fish_context):
                 continue
+
             if kind == "stock" and not (30 <= kg <= 20000):
                 continue
+
             if kind == "catch" and not (5 <= kg <= 20000):
                 continue
+
             if kind == "stock":
-                if not FOREL_RX.search(text[max(0,s-250):min(len(text),e+250)]) and not FOREL_RX.search(text):
+                forel_context = text[
+                    max(0, start - 250):
+                    min(len(text), end + 250)
+                ]
+
+                if (
+                    not FOREL_RX.search(forel_context)
+                    and not FOREL_RX.search(text)
+                ):
                     continue
-                ev_date, is_dated = resolve_event_date(text, s, e, post_dt)
-                before = text[max(0,s-60):s].lower()
+
+                event_date, is_dated = resolve_event_date(
+                    text,
+                    start,
+                    end,
+                    post_dt,
+                )
+
+                before = text[
+                    max(0, start - 60):
+                    start
+                ].lower()
+
                 if not is_dated and FUTURE_RX.search(before):
                     continue
+
             else:
-                ev_date, is_dated = post_date, False
-            results.append({"kind": kind, "kg": kg, "event_date": ev_date, "is_dated": is_dated, "quote": snippet(text, s), "pos": s})
-    dated_stock = [r for r in results if r["kind"] == "stock" and r["is_dated"]]
+                event_date = post_date
+                is_dated = False
+
+            results.append(
+                {
+                    "kind": kind,
+                    "kg": kg,
+                    "event_date": event_date,
+                    "is_dated": is_dated,
+                    "quote": snippet(text, start),
+                    "pos": start,
+                }
+            )
+
+    # Если в сообщении найден запуск с указанной датой,
+    # удаляем из этого же сообщения неопределённые запуски.
+    dated_stock = [
+        result
+        for result in results
+        if (
+            result["kind"] == "stock"
+            and result["is_dated"]
+        )
+    ]
+
     if dated_stock:
-        results = [r for r in results if not (r["kind"] == "stock" and not r["is_dated"])]
+        results = [
+            result
+            for result in results
+            if not (
+                result["kind"] == "stock"
+                and not result["is_dated"]
+            )
+        ]
+
     return results
+
 
 def main():
     os.makedirs("pages", exist_ok=True)
+
     import sqlite3
-    DB = sqlite3.connect("fishing.db")
-    DB.execute("DROP TABLE IF EXISTS posts")
-    DB.execute("CREATE TABLE posts (post_id TEXT PRIMARY KEY, page INT, author TEXT, post_dt TEXT, text TEXT)")
+
+    database = sqlite3.connect("fishing.db")
+
+    database.execute("DROP TABLE IF EXISTS posts")
+
+    database.execute(
+        """
+        CREATE TABLE posts (
+            post_id TEXT PRIMARY KEY,
+            page INT,
+            author TEXT,
+            post_dt TEXT,
+            text TEXT
+        )
+        """
+    )
+
     state = load_state()
+
     print("Проверяю форум...")
-    html1 = fetch(page_url(1))
-    if not html1:
+
+    first_page_html = fetch(page_url(1))
+
+    if not first_page_html:
         raise SystemExit("Форум не ответил")
-    last = total_pages(html1)
-    print(f"Всего страниц: {last}")
+
+    last_page = total_pages(first_page_html)
+
+    print(f"Всего страниц: {last_page}")
+
     if not state.get("start_page"):
         print("Ищу 2024 год...")
-        lo, hi = 1, last
-        while lo < hi:
-            mid = (lo+hi)//2
-            h = fetch(page_url(mid))
-            d = first_date(h) if h else ""
-            print(f" стр.{mid}: {d or '?'}")
+
+        low = 1
+        high = last_page
+
+        while low < high:
+            middle = (low + high) // 2
+            html = fetch(page_url(middle))
+            found_date = first_date(html) if html else ""
+
+            print(
+                f" стр.{middle}: "
+                f"{found_date or '?'}"
+            )
+
             time.sleep(1.5)
-            if not d or d >= START_DATE:
-                hi = mid
+
+            if not found_date or found_date >= START_DATE:
+                high = middle
             else:
-                lo = mid+1
-        state["start_page"] = max(1, lo-1)
-        state["cursor"] = last
-        state["newest"] = last
+                low = middle + 1
+
+        state["start_page"] = max(1, low - 1)
+        state["cursor"] = last_page
+        state["newest"] = last_page
+
     start_page = state["start_page"]
-    to_do = []
-    if last > state.get("newest", last):
-        for p in range(state["newest"]+1, last+1):
-            to_do.append(p)
-        state["newest"] = last
-    p = state.get("cursor", last)
-    added = []
-    while len(added) < BATCH and p >= start_page:
-        fn = f"pages/page_{p:06d}.json"
-        if not os.path.exists(fn):
-            added.append(p)
-        p -= 1
-    state["cursor"] = p
-    tail = list(range(max(start_page, last-REFRESH_TAIL+1), last+1))
-    to_do = sorted(set(to_do+added+tail))
-    print(f"Загружаю {len(to_do)} страниц...")
-    for i, pg in enumerate(to_do):
-        h = fetch(page_url(pg))
-        if h:
-            posts = parse_posts(h, pg)
-            json.dump(posts, open(f"pages/page_{pg:06d}.json", "w", encoding="utf-8"), ensure_ascii=False)
-            print(f" {i+1}/{len(to_do)} стр.{pg}: {len(posts)} постов")
-        time.sleep(random.uniform(1.5, 2.5))
-        if (i+1) % 20 == 0:
-            json.dump(state, open("state.json", "w"), ensure_ascii=False)
-    for fn in os.listdir("pages"):
-        if not fn.endswith(".json"):
+    pages_to_download = []
+
+    # Если на форуме появились новые страницы,
+    # обязательно добавляем их в очередь.
+    if last_page > state.get("newest", last_page):
+        for page_number in range(
+            state["newest"] + 1,
+            last_page + 1,
+        ):
+            pages_to_download.append(page_number)
+
+        state["newest"] = last_page
+
+    cursor = state.get("cursor", last_page)
+    added_pages = []
+
+    while (
+        len(added_pages) < BATCH
+        and cursor >= start_page
+    ):
+        filename = f"pages/page_{cursor:06d}.json"
+
+        if not os.path.exists(filename):
+            added_pages.append(cursor)
+
+        cursor -= 1
+
+    state["cursor"] = cursor
+
+    # Последние страницы регулярно перезагружаются,
+    # поскольку сообщения там могут редактироваться.
+    tail_pages = list(
+        range(
+            max(
+                start_page,
+                last_page - REFRESH_TAIL + 1,
+            ),
+            last_page + 1,
+        )
+    )
+
+    pages_to_download = sorted(
+        set(
+            pages_to_download +
+            added_pages +
+            tail_pages
+        )
+    )
+
+    print(
+        f"Загружаю "
+        f"{len(pages_to_download)} страниц..."
+    )
+
+    for index, page_number in enumerate(
+        pages_to_download
+    ):
+        html = fetch(page_url(page_number))
+
+        if html:
+            posts = parse_posts(
+                html,
+                page_number,
+            )
+
+            filename = (
+                f"pages/page_{page_number:06d}.json"
+            )
+
+            with open(
+                filename,
+                "w",
+                encoding="utf-8",
+            ) as file:
+                json.dump(
+                    posts,
+                    file,
+                    ensure_ascii=False,
+                )
+
+            print(
+                f" {index + 1}/"
+                f"{len(pages_to_download)} "
+                f"стр.{page_number}: "
+                f"{len(posts)} постов"
+            )
+
+        time.sleep(
+            random.uniform(1.5, 2.5)
+        )
+
+        if (index + 1) % 20 == 0:
+            with open(
+                "state.json",
+                "w",
+                encoding="utf-8",
+            ) as file:
+                json.dump(
+                    state,
+                    file,
+                    ensure_ascii=False,
+                )
+
+    # Загружаем все сохранённые страницы в базу.
+    for filename in os.listdir("pages"):
+        if not filename.endswith(".json"):
             continue
+
         try:
-            posts = json.load(open(f"pages/{fn}", encoding="utf-8"))
+            with open(
+                f"pages/{filename}",
+                encoding="utf-8",
+            ) as file:
+                posts = json.load(file)
+
             for post in posts:
-                dtv = post.get("post_dt") or post.get("post_date") or ""
-                DB.execute("INSERT OR IGNORE INTO posts VALUES (?,?,?,?,?)",
-                    (post.get("post_id",""), post.get("page",0), post.get("author",""), dtv, post.get("text","")))
-            DB.commit()
-        except:
-            continue
-    json.dump(state, open("state.json", "w"), ensure_ascii=False)
-    build(DB, state, last)
+                post_datetime = (
+                    post.get("post_dt")
+                    or post.get("post_date")
+                    or ""
+                )
+
+                database.execute(
+                    """
+                    INSERT OR IGNORE INTO posts
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        post.get("post_id", ""),
+                        post.get("page", 0),
+                        post.get("author", ""),
+                        post_datetime,
+                        post.get("text", ""),
+                    ),
+                )
+
+            database.commit()
+
+        except Exception as error:
+            print(
+                f"Не удалось прочитать "
+                f"{filename}: {error}"
+            )
+
+    with open(
+        "state.json",
+        "w",
+        encoding="utf-8",
+    ) as file:
+        json.dump(
+            state,
+            file,
+            ensure_ascii=False,
+        )
+
+    build(
+        database,
+        state,
+        last_page,
+    )
+
+    database.close()
+
     print("Готово!")
 
-def build(DB, state, last):
+
+def build(database, state, last_page):
     days = defaultdict(list)
-    day_stock_cand = defaultdict(list)
-    day_catch_cand = defaultdict(list)
-    for pid, pg, author, pdt, text in DB.execute("SELECT post_id, page, author, post_dt, text FROM posts"):
-        d = (pdt or "")[:10]
-        url = f"{THREAD}/page-{pg}#post-{pid}" if pid else f"{THREAD}/page-{pg}"
-        if d and FOREL_RX.search(text or "") and d >= START_DATE:
-            days[d].append(url)
-        if not pdt or not d:
-            continue
-        if d < BALANCE_START:
-            try:
-                if (date.fromisoformat(BALANCE_START)-date.fromisoformat(d)).days > 10:
-                    continue
-            except:
-                continue
-        if ADMIN_AUTHORS and (author or "") not in ADMIN_AUTHORS:
-            continue
-        try:
-            evs = find_stock_catch(text or "", pdt)
-        except Exception as ex:
-            print(f"parse err: {ex}")
-            continue
-        for ev in evs:
-            ed = ev["event_date"]
-            if not ed or ed < BALANCE_START:
-                continue
-            hh = pdt[11:16] if len(pdt) >= 16 else ""
-            pd_short = pdt[5:10] if len(pdt) >= 10 else ""
-            rec = {"kg": ev["kg"], "url": url, "quote": f"пост {pd_short} {hh} {ev['quote']}"[:150], "dt": pdt, "is_fact": (pdt[:10] == ed)}
-            if ev["kind"] == "stock":
-                day_stock_cand[ed].append(rec)
-            else:
-                day_catch_cand[ed].append(rec)
-    day_stock = {}
-    for dd, lst in day_stock_cand.items():
-        facts = [r for r in lst if r["is_fact"]]
-        pool = facts if facts else lst
-        if facts:
-            best = sorted(pool, key=lambda x: x["dt"])[0]
+    day_stock_candidates = defaultdict(list)
+    day_catch_candidates = defaultdict(list)
+
+    query = """
+        SELECT
+            post_id,
+            page,
+            author,
+            post_dt,
+            text
+        FROM posts
+    """
+
+    for (
+        post_id,
+        page_number,
+        author,
+        post_datetime,
+        text,
+    ) in database.execute(query):
+
+        post_day = (post_datetime or "")[:10]
+
+        if post_id:
+            post_url = (
+                f"{THREAD}/page-{page_number}"
+                f"#post-{post_id}"
+            )
         else:
-            best = sorted(pool, key=lambda x: x["dt"])[-1]
-        day_stock[dd] = best
+            post_url = (
+                f"{THREAD}/page-{page_number}"
+            )
+
+        # Общая статистика сообщений о форели.
+        if (
+            post_day
+            and FOREL_RX.search(text or "")
+            and post_day >= START_DATE
+        ):
+            days[post_day].append(post_url)
+
+        if not post_datetime or not post_day:
+            continue
+
+        # Для баланса проверяем только сообщения,
+        # опубликованные незадолго до начала подсчёта
+        # или после него.
+        if post_day < BALANCE_START:
+            try:
+                distance = (
+                    date.fromisoformat(BALANCE_START) -
+                    date.fromisoformat(post_day)
+                ).days
+
+                if distance > 10:
+                    continue
+
+            except (TypeError, ValueError):
+                continue
+
+        # Личные отчёты рыбаков больше не попадают
+        # в официальный баланс.
+        if (
+            ADMIN_AUTHORS
+            and (author or "") not in ADMIN_AUTHORS
+        ):
+            continue
+
+        try:
+            events = find_stock_catch(
+                text or "",
+                post_datetime,
+            )
+        except Exception as error:
+            print(f"parse err: {error}")
+            continue
+
+        for event in events:
+            event_day = event["event_date"]
+
+            if (
+                not event_day
+                or event_day < BALANCE_START
+            ):
+                continue
+
+            post_time = (
+                post_datetime[11:16]
+                if len(post_datetime) >= 16
+                else ""
+            )
+
+            short_post_day = (
+                post_datetime[5:10]
+                if len(post_datetime) >= 10
+                else ""
+            )
+
+            record = {
+                "kg": event["kg"],
+                "url": post_url,
+                "quote": (
+                    f"пост {short_post_day} "
+                    f"{post_time} "
+                    f"{event['quote']}"
+                )[:150],
+                "dt": post_datetime,
+
+                # Сообщение считается фактическим,
+                # если опубликовано в день события.
+                "is_fact": (
+                    post_datetime[:10] == event_day
+                ),
+
+                # Позиция числа в тексте нужна,
+                # чтобы при одинаковой дате сообщения
+                # выбрать последнее значение.
+                "pos": event.get("pos", 0),
+            }
+
+            if event["kind"] == "stock":
+                day_stock_candidates[
+                    event_day
+                ].append(record)
+            else:
+                day_catch_candidates[
+                    event_day
+                ].append(record)
+
+    day_stock = {}
+
+    for event_day, records in (
+        day_stock_candidates.items()
+    ):
+        factual_records = [
+            record
+            for record in records
+            if record["is_fact"]
+        ]
+
+        # Если есть подтверждение в день запуска,
+        # анонсы отбрасываем.
+        pool = factual_records or records
+
+        # Берём последнее значение:
+        # сначала по дате и времени сообщения,
+        # затем по позиции числа в сообщении.
+        #
+        # Например, из текста:
+        # «обещали 200–300 кг, произвели запуск 463 кг»
+        # будет выбрано 463 кг.
+        day_stock[event_day] = max(
+            pool,
+            key=lambda record: (
+                record["dt"],
+                record.get("pos", 0),
+            ),
+        )
+
     day_catch = {}
-    for dd, lst in day_catch_cand.items():
-        best = sorted(lst, key=lambda x: x["dt"])[-1]
-        day_catch[dd] = best
-    day_ev = {}
-    for dd, r in day_stock.items():
-        day_ev.setdefault(dd, {})["stock"] = r
-    for dd, r in day_catch.items():
-        day_ev.setdefault(dd, {})["catch"] = r
+
+    for event_day, records in (
+        day_catch_candidates.items()
+    ):
+        # Берём последний официальный итог вылова.
+        day_catch[event_day] = max(
+            records,
+            key=lambda record: (
+                record["dt"],
+                record.get("pos", 0),
+            ),
+        )
+
+    day_events = {}
+
+    for event_day, record in day_stock.items():
+        day_events.setdefault(
+            event_day,
+            {},
+        )["stock"] = record
+
+    for event_day, record in day_catch.items():
+        day_events.setdefault(
+            event_day,
+            {},
+        )["catch"] = record
+
     weather = {}
+
     try:
-        w = requests.get("https://archive-api.open-meteo.com/v1/archive", params={
-            "latitude": 55.82, "longitude": 37.33,
-            "start_date": START_DATE,
-            "end_date": str(date.today()-timedelta(days=5)),
-            "daily": "temperature_2m_mean,precipitation_sum,pressure_msl_mean",
-            "timezone": "Europe/Moscow"}, timeout=30).json()["daily"]
-        for i, day in enumerate(w["time"]):
-            pr = w["pressure_msl_mean"][i]
-            weather[day] = {"temp": w["temperature_2m_mean"][i], "precip": w["precipitation_sum"][i],
-                "pressure": round(pr*0.75006, 1) if pr else None}
-    except Exception as e:
-        print("Погода недоступна:", e)
-    month_act = defaultdict(list)
-    press = {"<745": [], "745-760": [], ">760": []}
-    for dd, urls in days.items():
-        month_act[dd[:7]].append(len(urls))
-        pw = (weather.get(dd) or {}).get("pressure")
-        if pw:
-            k = "<745" if pw < 745 else "745-760" if pw <= 760 else ">760"
-            press[k].append(len(urls))
-    avg = lambda l: round(sum(l)/len(l), 2) if l else 0
+        weather_response = requests.get(
+            "https://archive-api.open-meteo.com/v1/archive",
+            params={
+                "latitude": 55.82,
+                "longitude": 37.33,
+                "start_date": START_DATE,
+                "end_date": str(
+                    date.today() -
+                    timedelta(days=5)
+                ),
+                "daily": (
+                    "temperature_2m_mean,"
+                    "precipitation_sum,"
+                    "pressure_msl_mean"
+                ),
+                "timezone": "Europe/Moscow",
+            },
+            timeout=30,
+        )
+
+        weather_data = weather_response.json()["daily"]
+
+        for index, weather_day in enumerate(
+            weather_data["time"]
+        ):
+            pressure = (
+                weather_data[
+                    "pressure_msl_mean"
+                ][index]
+            )
+
+            weather[weather_day] = {
+                "temp": (
+                    weather_data[
+                        "temperature_2m_mean"
+                    ][index]
+                ),
+                "precip": (
+                    weather_data[
+                        "precipitation_sum"
+                    ][index]
+                ),
+                "pressure": (
+                    round(
+                        pressure * 0.75006,
+                        1,
+                    )
+                    if pressure is not None
+                    else None
+                ),
+            }
+
+    except Exception as error:
+        print(
+            "Погода недоступна:",
+            error,
+        )
+
+    monthly_activity = defaultdict(list)
+
+    pressure_activity = {
+        "<745": [],
+        "745-760": [],
+        ">760": [],
+    }
+
+    for day_value, urls in days.items():
+        monthly_activity[
+            day_value[:7]
+        ].append(len(urls))
+
+        pressure = (
+            weather.get(day_value) or {}
+        ).get("pressure")
+
+        if pressure is not None:
+            if pressure < 745:
+                pressure_group = "<745"
+            elif pressure <= 760:
+                pressure_group = "745-760"
+            else:
+                pressure_group = ">760"
+
+            pressure_activity[
+                pressure_group
+            ].append(len(urls))
+
+    def average(values):
+        if not values:
+            return 0
+
+        return round(
+            sum(values) / len(values),
+            2,
+        )
+
     import glob
-    collected = len(glob.glob("pages/*.json"))
-    need = state.get("newest", last)-state.get("start_page", last)+1
-    stats = {"monthly": {m: avg(v) for m, v in sorted(month_act.items())},
-        "pressure": {k: avg(v) for k, v in press.items()},
-        "total_posts": sum(len(v) for v in days.values()),
+
+    collected_pages = len(
+        glob.glob("pages/*.json")
+    )
+
+    needed_pages = (
+        state.get("newest", last_page) -
+        state.get("start_page", last_page) +
+        1
+    )
+
+    statistics = {
+        "monthly": {
+            month: average(values)
+            for month, values
+            in sorted(monthly_activity.items())
+        },
+        "pressure": {
+            group: average(values)
+            for group, values
+            in pressure_activity.items()
+        },
+        "total_posts": sum(
+            len(values)
+            for values in days.values()
+        ),
         "active_days": len(days),
-        "collected": collected, "need": max(need, 1),
-        "pct": round(collected/max(need,1)*100, 1),
-        "updated": str(date.today())}
+        "collected": collected_pages,
+        "need": max(needed_pages, 1),
+        "pct": round(
+            collected_pages /
+            max(needed_pages, 1) *
+            100,
+            1,
+        ),
+        "updated": str(date.today()),
+    }
+
     table = []
-    for dd in sorted(days, reverse=True)[:60]:
-        wv = weather.get(dd) or {}
-        table.append({"day": dd, "posts": len(days[dd]), "temp": wv.get("temp"),
-            "pressure": wv.get("pressure"), "precip": wv.get("precip"), "links": days[dd][:5]})
-    bdates, bst, bct, brem = [], [], [], []
-    total_s = total_c = 0
+
+    for day_value in sorted(
+        days,
+        reverse=True,
+    )[:60]:
+        weather_values = (
+            weather.get(day_value) or {}
+        )
+
+        table.append(
+            {
+                "day": day_value,
+                "posts": len(days[day_value]),
+                "temp": weather_values.get("temp"),
+                "pressure": weather_values.get(
+                    "pressure"
+                ),
+                "precip": weather_values.get(
+                    "precip"
+                ),
+                "links": days[day_value][:5],
+            }
+        )
+
+    balance_dates = []
+    balance_stocked = []
+    balance_caught = []
+    balance_remaining = []
+
+    total_stocked = 0
+    total_caught = 0
     last_stock_day = None
-    if day_ev:
-        d0 = min(day_ev)
-        d1 = max(max(day_ev), str(date.today()))
-        cur_d = date.fromisoformat(d0)
-        end_d = date.fromisoformat(d1)
-        rem = 0
-        while cur_d <= end_d:
-            ds = str(cur_d)
-            ev = day_ev.get(ds, {})
-            s = ev.get("stock", {}).get("kg", 0)
-            c = ev.get("catch", {}).get("kg", 0)
-            total_s += s; total_c += c
-            rem = max(0, rem+s-c)
-            if s:
-                last_stock_day = ds
-            bdates.append(ds); bst.append(s); bct.append(c); brem.append(rem)
-            cur_d += timedelta(days=1)
-    remaining = brem[-1] if brem else 0
-    days_since = (date.today()-date.fromisoformat(last_stock_day)).days if last_stock_day else None
+
+    if day_events:
+        first_event_day = min(day_events)
+
+        last_event_day = max(
+            max(day_events),
+            str(date.today()),
+        )
+
+        current_day = date.fromisoformat(
+            first_event_day
+        )
+
+        end_day = date.fromisoformat(
+            last_event_day
+        )
+
+        remaining = 0
+
+        while current_day <= end_day:
+            day_string = str(current_day)
+            event = day_events.get(
+                day_string,
+                {},
+            )
+
+            stocked = (
+                event.get(
+                    "stock",
+                    {},
+                ).get("kg", 0)
+            )
+
+            caught = (
+                event.get(
+                    "catch",
+                    {},
+                ).get("kg", 0)
+            )
+
+            total_stocked += stocked
+            total_caught += caught
+
+            remaining = max(
+                0,
+                remaining + stocked - caught,
+            )
+
+            if stocked:
+                last_stock_day = day_string
+
+            balance_dates.append(day_string)
+            balance_stocked.append(stocked)
+            balance_caught.append(caught)
+            balance_remaining.append(remaining)
+
+            current_day += timedelta(days=1)
+
+    remaining = (
+        balance_remaining[-1]
+        if balance_remaining
+        else 0
+    )
+
+    if last_stock_day:
+        days_since_stock = (
+            date.today() -
+            date.fromisoformat(last_stock_day)
+        ).days
+    else:
+        days_since_stock = None
+
     events = []
-    for dd in sorted(day_ev, reverse=True)[:40]:
+
+    for event_day in sorted(
+        day_events,
+        reverse=True,
+    )[:40]:
         for kind in ("stock", "catch"):
-            if kind in day_ev[dd]:
-                e = day_ev[dd][kind]
-                events.append({"day": dd, "type": "запуск" if kind == "stock" else "вылов",
-                    "kg": e["kg"], "url": e["url"], "quote": e["quote"]})
-    balance = {"start": BALANCE_START, "total_stocked": total_s, "total_caught": total_c,
-        "remaining": remaining, "days_since_stock": days_since,
-        "series": {"dates": bdates, "stocked": bst, "caught": bct, "remaining": brem}, "events": events}
-    payload = json.dumps({"stats": stats, "table": table, "balance": balance}, ensure_ascii=False)
-    payload = payload.replace("</", "<\\/")
-    open("index.html", "w", encoding="utf-8").write(TEMPLATE.replace("__DATA__", payload))
-    print(f"Сайт собран: остаток {remaining} кг")
+            if kind not in day_events[event_day]:
+                continue
+
+            event = day_events[event_day][kind]
+
+            events.append(
+                {
+                    "day": event_day,
+                    "type": (
+                        "запуск"
+                        if kind == "stock"
+                        else "вылов"
+                    ),
+                    "kg": event["kg"],
+                    "url": event["url"],
+                    "quote": event["quote"],
+                }
+            )
+
+    balance = {
+        "start": BALANCE_START,
+        "total_stocked": total_stocked,
+        "total_caught": total_caught,
+        "remaining": remaining,
+        "days_since_stock": days_since_stock,
+        "series": {
+            "dates": balance_dates,
+            "stocked": balance_stocked,
+            "caught": balance_caught,
+            "remaining": balance_remaining,
+        },
+        "events": events,
+    }
+
+    payload = json.dumps(
+        {
+            "stats": statistics,
+            "table": table,
+            "balance": balance,
+        },
+        ensure_ascii=False,
+    )
+
+    payload = payload.replace(
+        "</",
+        "<\\/",
+    )
+
+    final_html = TEMPLATE.replace(
+        "__DATA__",
+        payload,
+    )
+
+    with open(
+        "index.html",
+        "w",
+        encoding="utf-8",
+    ) as file:
+        file.write(final_html)
+
+    print(
+        f"Сайт собран: остаток "
+        f"{remaining} кг"
+    )
+
 
 if __name__ == "__main__":
     main()
