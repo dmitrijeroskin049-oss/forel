@@ -27,23 +27,32 @@ ADMIN_AUTHORS = [
     "Митяй-Митинооо",
 ]
 
-BATCH = 150
+# Игнорируем запуски в эти дни (4–8 сентября 2026).
+IGNORE_STOCK_DAYS = {
+    "2026-09-04",
+    "2026-09-05",
+    "2026-09-06",
+    "2026-09-07",
+    "2026-09-08",
+}
 
-# Обновляем последние 15 страниц форума при каждом запуске.
+BATCH = 150
 REFRESH_TAIL = 15
 
+# Рыба
 FOREL_RX = re.compile(r"форел", re.I)
-
 OTHER_FISH = re.compile(
     r"осет|осётр|карп|сом\b|щук|белуг|стерляд|карас|"
     r"окун|судак|сиг\b|налим|амур|толстолоб|линь",
     re.I,
 )
 
+# Дата
 DATE_RX = re.compile(
     r"(?<!\d)(\d{1,2})\.(\d{2})(?:\.(\d{2,4}))?(?!\d)"
 )
 
+# Вес
 KG_RX = re.compile(
     r"(\d+(?:[.,]\d+)?)"
     r"(?:\s*[-–—]\s*(\d+(?:[.,]\d+)?))?"
@@ -51,41 +60,82 @@ KG_RX = re.compile(
     re.I,
 )
 
+# Запуск/вылов
 STOCK_KW_RX = re.compile(
     r"запуск|запустили|зарыбление|зарыбили|"
     r"завезли|завоз|выпустили",
     re.I,
 )
-
 CATCH_KW_RX = re.compile(
     r"вылов\w*|итог дня|итого",
     re.I,
 )
-
 FUTURE_RX = re.compile(
     r"сделаем|будет|будут|планиру|анонс|"
     r"ожидается|собираемся|намечает",
     re.I,
 )
 
+# Без единиц
 STOCK_NOUNIT_RX = re.compile(
     r"(запуск\w*|запустили|зарыбление\w*)"
     r"\s*[:\-–—]?\s*(\d{2,4})\b",
     re.I,
 )
-
 CATCH_NOUNIT_RX = re.compile(
     r"(вылов\w*|итог\w*)"
     r"\s*[:\-–—]?\s*(\d{1,4})\b",
     re.I,
 )
 
-# Конец предложения — правая привязка числа к слову
-# через точку запрещена («150 кг. Вылов 56 кг»).
+# Навеска
+NABECKA_RX = re.compile(r"навеск", re.I)
+
+# Точки на водоёме
+LOCATION_RX = re.compile(
+    r"основной водо[её]м|дальний угол|у плотин\w*|"
+    r"у коряг\w*|у входа|у выхода|центр\w*|мелководь\w*|"
+    r"глубок\w* участок|у берега|у причала|у мостка|"
+    r"у дамбы|у стены|у кустов|у травы|у тростника|"
+    r"у затопленн\w* дерев\w*|у ямы|у бровки|у сваи|"
+    r"у трубы|у слива|у аэратора|у кормушк\w*|"
+    r"у обрыва|у отмели|у переката|у залива|у бухты",
+    re.I,
+)
+
+# Приманки
+LURE_RX = re.compile(
+    r"вертушк\w*|воблер\w*|резин\w*|мушк\w*|блесна|"
+    r"черв\w*|опарыш\w*|мотыл\w*|пенопласт|тесто|сыр|"
+    r"бойл\w*|поппер\w*|цикад\w*|колебалк\w*|вращалк\w*|"
+    r"силикон\w*|твистер\w*|виброхвост\w*|рапал\w*|"
+    r"минноу|кренк\w*|джерк\w*|спининг\w*|донк\w*|"
+    r"фидер\w*|поплавочн\w*|мормышк\w*|балда|стример\w*|"
+    r"нимф\w*|сухая мушка|мокрая мушка|личинк\w*|"
+    r"мотылёк|ручейник",
+    re.I,
+)
+
+# Время суток
+TIME_RX = re.compile(
+    r"утро|вечер|ночь|рассвет|закат|день|"
+    r"с (\d{1,2}) до (\d{1,2})|после (\d{1,2})|до (\d{1,2})",
+    re.I,
+)
+
+# Горизонт воды
+DEPTH_RX = re.compile(
+    r"дно|полвод\w*|поверхност\w*|у дна|в полвод\w*|"
+    r"верхний слой|средний слой|придонный слой|"
+    r"у поверхност\w*|под берегом|на глубин[еу] (\d+)\s*м|"
+    r"на (\d+)\s*м",
+    re.I,
+)
+
+# Конец предложения
 SENTENCE_RX = re.compile(r"[.!?…]")
 
-# Между словом и числом не должно быть «корм/прикорм»,
-# иначе «завоз корма 500 кг» примется за запуск рыбы.
+# Запрещённые слова между ключевым словом и числом
 BAD_BETWEEN_RX = re.compile(r"корм|прикорм|пеллет|смес", re.I)
 
 TEMPLATE = """<!DOCTYPE html>
@@ -161,6 +211,21 @@ a:hover{text-decoration:underline}
 <h3>Последние активные дни</h3>
 <div class="card"><table id="t"></table></div>
 
+<h2>🎣 Перспективные точки и приманки</h2>
+<div class="card">
+  <h3>Где лучше клюёт</h3>
+  <div class="note">По отчётам рыбаков с начала 2024 года</div>
+  <table id="locs"></table>
+</div>
+<div class="card">
+  <h3>Какая приманка лучше работает</h3>
+  <canvas id="lure"></canvas>
+</div>
+<div class="card">
+  <h3>В какое время лучше клюёт</h3>
+  <canvas id="time"></canvas>
+</div>
+
 <script>
 try {
     const D = __DATA__;
@@ -201,17 +266,52 @@ try {
     if (D.table && D.table.length > 0) {
         document.getElementById('t').innerHTML = '<tr><th>Дата</th><th>П</th><th>t°</th><th>Давл</th><th>Осадки</th><th></th></tr>' + D.table.map(r => `<tr><td>${r.day}</td><td>${r.posts}</td><td>${r.temp ?? '—'}</td><td>${r.pressure ?? '—'}</td><td>${r.precip ?? '—'}</td><td>${(r.links || []).map((u, i) => `<a href="${u}" target="_blank" rel="noopener">#${i + 1}</a>`).join(' ')}</td></tr>`).join('');
     }
+    if (D.locations && D.locations.length > 0) {
+        document.getElementById('locs').innerHTML = '<tr><th>Дата</th><th>Точка</th><th>Приманка</th><th>Время</th><th>Горизонт</th><th>Улов</th><th>Цитата</th></tr>' + D.locations.map(r => `<tr><td>${r.day}</td><td>${r.location || '—'}</td><td>${r.lure || '—'}</td><td>${r.time || '—'}</td><td>${r.depth || '—'}</td><td>${r.catch || '—'}</td><td class="q"><a href="${r.url}" target="_blank" rel="noopener">${r.quote}</a></td></tr>`).join('');
+    } else { document.getElementById('locs').innerHTML = '<tr><td class="note">Пока нет отчётов.</td></tr>'; }
+    if (D.lure_stats) {
+        new Chart(document.getElementById('lure'), {
+            type: 'bar',
+            data: {
+                labels: Object.keys(D.lure_stats),
+                datasets: [{
+                    label: 'Успешных случаев',
+                    data: Object.values(D.lure_stats),
+                    backgroundColor: '#38bdf8'
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } }
+            }
+        });
+    }
+    if (D.time_stats) {
+        new Chart(document.getElementById('time'), {
+            type: 'bar',
+            data: {
+                labels: Object.keys(D.time_stats),
+                datasets: [{
+                    label: 'Успешных случаев',
+                    data: Object.values(D.time_stats),
+                    backgroundColor: '#4ade80'
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } }
+            }
+        });
+    }
 } catch (err) { console.error(err); }
 </script>
 </body>
 </html>"""
 
-
 def page_url(page_number):
     if page_number == 1:
         return THREAD
     return f"{THREAD}/page-{page_number}"
-
 
 def fetch(url, tries=3):
     for attempt in range(tries):
@@ -235,7 +335,6 @@ def fetch(url, tries=3):
         time.sleep(3 * (attempt + 1))
     return None
 
-
 def parse_posts(html, page):
     soup = BeautifulSoup(html, "lxml")
     posts = []
@@ -258,7 +357,6 @@ def parse_posts(html, page):
         })
     return posts
 
-
 def total_pages(html):
     soup = BeautifulSoup(html, "lxml")
     navigation = soup.select_one(".pageNav")
@@ -274,7 +372,6 @@ def total_pages(html):
             numbers.append(int(text))
     return max(numbers) if numbers else 10451
 
-
 def first_date(html):
     if not html:
         return ""
@@ -283,7 +380,6 @@ def first_date(html):
     if not time_element:
         return ""
     return (time_element.get("datetime") or "")[:10]
-
 
 def load_state():
     if not os.path.exists(STATE_FILE):
@@ -294,13 +390,11 @@ def load_state():
     except Exception:
         return {}
 
-
 def snippet(text, position, width=80):
     start = max(0, position - 15)
     end = min(len(text), position + width)
     clean_text = re.sub(r"\s+", " ", text[start:end]).strip()
     return "…" + clean_text + "…"
-
 
 def resolve_event_date(text, start, end, post_dt):
     post_date = (post_dt or "")[:10]
@@ -347,19 +441,11 @@ def resolve_event_date(text, start, end, post_dt):
 
     return post_date, False
 
-
 def is_weight_of_size(text, start):
-    """
-    True, если вес относится именно к навеске рыбы
-    («навеска 1-2 кг»). Слово «навеска» должно быть ДО числа,
-    иначе потеряется «Запуск 204 кг. Навеска 1.5-3 кг».
-    """
     before = text[max(0, start - 45):start].lower()
     return bool(re.search(r"навеск\w*[^0-9]{0,25}$", before, re.I))
 
-
 def build_keyword_index(text):
-    """Все слова запуск/вылов с позициями."""
     keywords = []
     for match in STOCK_KW_RX.finditer(text):
         keywords.append((match.start(), match.end(), "stock"))
@@ -368,14 +454,7 @@ def build_keyword_index(text):
     keywords.sort(key=lambda item: item[0])
     return keywords
 
-
 def keyword_kind_for(text, keywords, start, end):
-    """
-    Определяет, к запуску или вылову относится число.
-    Приоритет — ближайшее слово СЛЕВА («Запуск 101 кг»),
-    потому что в русском языке слово стоит перед числом.
-    Привязка справа — только в пределах одного предложения.
-    """
     lefts = [k for k in keywords if k[1] <= start]
     if lefts:
         kw_start, kw_end, kind = lefts[-1]
@@ -395,7 +474,6 @@ def keyword_kind_for(text, keywords, start, end):
             return kind
 
     return None
-
 
 def find_stock_catch(text, post_dt):
     post_date = (post_dt or "")[:10]
@@ -443,13 +521,8 @@ def find_stock_catch(text, post_dt):
 
         if kind == "stock":
             forel_context = text[max(0, start - 250):min(len(text), end + 250)]
-
-            # Слово «форель» обязательно только если рядом
-            # упомянута другая рыба. Администрация часто пишет
-            # просто «Запуск 101 кг» без слова «форель».
             if not FOREL_RX.search(forel_context) and OTHER_FISH.search(forel_context):
                 continue
-
             event_date, is_dated = resolve_event_date(text, start, end, post_dt)
             before = text[max(0, start - 60):start].lower()
             if not is_dated and FUTURE_RX.search(before):
@@ -518,26 +591,64 @@ def find_stock_catch(text, post_dt):
                 "pos": start,
             })
 
-    # Если в сообщении найден запуск с указанной датой,
-    # удаляем из этого же сообщения неопределённые запуски.
     dated_stock = [r for r in results if r["kind"] == "stock" and r["is_dated"]]
     if dated_stock:
         results = [r for r in results if not (r["kind"] == "stock" and not r["is_dated"])]
 
     return results
 
+def extract_location(text):
+    match = LOCATION_RX.search(text)
+    return match.group(0) if match else None
+
+def extract_lure(text):
+    match = LURE_RX.search(text)
+    return match.group(0) if match else None
+
+def extract_time(text):
+    match = TIME_RX.search(text)
+    if match:
+        if match.group(1):  # "с X до Y"
+            return f"{match.group(1)}–{match.group(2)}"
+        elif match.group(3):  # "после X"
+            return f"после {match.group(3)}"
+        elif match.group(4):  # "до X"
+            return f"до {match.group(4)}"
+        else:
+            return match.group(0)
+    return None
+
+def extract_depth(text):
+    match = DEPTH_RX.search(text)
+    if match:
+        if match.group(1):  # "на глубине X м"
+            return f"{match.group(1)} м"
+        elif match.group(2):  # "на X м"
+            return f"{match.group(2)} м"
+        else:
+            return match.group(0)
+    return None
+
+def extract_catch(text):
+    """Ищет упоминания улова: '3 форели', '5 штук', 'два килограмма'."""
+    catch_rx = re.compile(
+        r"(?:поймал[аи]?|выловил[аи]?|в улове|уловил[аи]?|взял[аи]?|на улов|в сумме|итого)\s*"
+        r"(?:(\d+)\s*(?:штук|экземпляр|рыб|форел|кг|килограмм))|"
+        r"(?:(\d+)\s*форел)|"
+        r"(?:форел[ьи]\s*(\d+))",
+        re.I,
+    )
+    match = catch_rx.search(text)
+    if match:
+        for group in match.groups():
+            if group:
+                return group + " шт."
+    return None
 
 def load_weather():
-    """
-    1) Архив Open-Meteo — вся история с 2024 года.
-    2) Forecast API — последние ~7 дней, потому что архив
-       запаздывает примерно на 5 суток и без него
-       у свежих дней не будет давления и температуры.
-    """
     weather = {}
     today = date.today()
 
-    # 1) Архив за весь период.
     try:
         response = requests.get(
             "https://archive-api.open-meteo.com/v1/archive",
@@ -546,11 +657,7 @@ def load_weather():
                 "longitude": 37.33,
                 "start_date": START_DATE,
                 "end_date": str(today - timedelta(days=5)),
-                "daily": (
-                    "temperature_2m_mean,"
-                    "precipitation_sum,"
-                    "pressure_msl_mean"
-                ),
+                "daily": "temperature_2m_mean,precipitation_sum,pressure_msl_mean",
                 "timezone": "Europe/Moscow",
             },
             timeout=60,
@@ -574,7 +681,6 @@ def load_weather():
     except Exception as error:
         print("Архив погоды недоступен:", error)
 
-    # 2) Свежие дни почасово из forecast API.
     try:
         response = requests.get(
             "https://api.open-meteo.com/v1/forecast",
@@ -599,37 +705,22 @@ def load_weather():
             buckets[stamp[:10]].append(index)
 
         for day, indexes in buckets.items():
-            day_temps = [
-                temps[i] for i in indexes
-                if i < len(temps) and temps[i] is not None
-            ]
-            day_precips = [
-                precips[i] for i in indexes
-                if i < len(precips) and precips[i] is not None
-            ]
-            day_pressures = [
-                pressures[i] for i in indexes
-                if i < len(pressures) and pressures[i] is not None
-            ]
+            day_temps = [temps[i] for i in indexes if i < len(temps) and temps[i] is not None]
+            day_precips = [precips[i] for i in indexes if i < len(precips) and precips[i] is not None]
+            day_pressures = [pressures[i] for i in indexes if i < len(pressures) and pressures[i] is not None]
 
             record = weather.get(day) or {}
-
             if day_temps and record.get("temp") is None:
                 record["temp"] = round(sum(day_temps) / len(day_temps), 1)
             if day_precips and record.get("precip") is None:
                 record["precip"] = round(sum(day_precips), 1)
             if day_pressures and record.get("pressure") is None:
-                record["pressure"] = round(
-                    sum(day_pressures) / len(day_pressures) * 0.75006,
-                    1,
-                )
-
+                record["pressure"] = round(sum(day_pressures) / len(day_pressures) * 0.75006, 1)
             weather[day] = record
     except Exception as error:
         print("Свежая погода недоступна:", error)
 
     return weather
-
 
 def main():
     os.makedirs(PAGES_DIR, exist_ok=True)
@@ -750,11 +841,11 @@ def main():
     database.close()
     print("Готово!")
 
-
 def build(database, state, last_page):
     days = defaultdict(list)
     day_stock_candidates = defaultdict(list)
     day_catch_candidates = defaultdict(list)
+    locations = []
 
     query = "SELECT post_id, page, author, post_dt, text FROM posts"
 
@@ -777,6 +868,24 @@ def build(database, state, last_page):
                 continue
 
         if ADMIN_AUTHORS and (author or "") not in ADMIN_AUTHORS:
+            # Для аналитики точек и приманок берём ВСЕ посты про форель.
+            if FOREL_RX.search(text or ""):
+                location = extract_location(text)
+                lure = extract_lure(text)
+                time_of_day = extract_time(text)
+                depth = extract_depth(text)
+                catch = extract_catch(text)
+                if location or lure or time_of_day or depth or catch:
+                    locations.append({
+                        "day": post_day,
+                        "location": location,
+                        "lure": lure,
+                        "time": time_of_day,
+                        "depth": depth,
+                        "catch": catch,
+                        "url": post_url,
+                        "quote": snippet(text, 0, 120),
+                    })
             continue
 
         try:
@@ -788,6 +897,8 @@ def build(database, state, last_page):
         for event in events:
             event_day = event["event_date"]
             if not event_day or event_day < BALANCE_START:
+                continue
+            if event_day in IGNORE_STOCK_DAYS and event["kind"] == "stock":
                 continue
 
             post_time = post_datetime[11:16] if len(post_datetime) >= 16 else ""
@@ -914,6 +1025,16 @@ def build(database, state, last_page):
                     "quote": e["quote"],
                 })
 
+    # Статистика приманок и времени суток.
+    lure_stats = defaultdict(int)
+    time_stats = defaultdict(int)
+
+    for report in locations:
+        if report["lure"]:
+            lure_stats[report["lure"]] += 1
+        if report["time"]:
+            time_stats[report["time"]] += 1
+
     balance = {
         "start": BALANCE_START,
         "total_stocked": total_stocked,
@@ -930,7 +1051,14 @@ def build(database, state, last_page):
     }
 
     payload = json.dumps(
-        {"stats": statistics, "table": table, "balance": balance},
+        {
+            "stats": statistics,
+            "table": table,
+            "balance": balance,
+            "locations": locations[:50],  # Последние 50 отчётов.
+            "lure_stats": dict(sorted(lure_stats.items(), key=lambda item: -item[1])[:10]),
+            "time_stats": dict(sorted(time_stats.items(), key=lambda item: -item[1])[:10]),
+        },
         ensure_ascii=False,
     ).replace("</", "<\\/")
 
@@ -940,7 +1068,6 @@ def build(database, state, last_page):
         file.write(final_html)
 
     print(f"Сайт собран: остаток {remaining} кг")
-
 
 if __name__ == "__main__":
     main()
