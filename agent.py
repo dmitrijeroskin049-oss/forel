@@ -39,9 +39,6 @@ IGNORE_STOCK_DAYS = {
 BATCH = 150
 REFRESH_TAIL = 15
 
-# Координаты водоёма (для погоды).
-LAT, LON = 55.8406, 37.3230
-
 # Рыба
 FOREL_RX = re.compile(r"форел", re.I)
 OTHER_FISH = re.compile(
@@ -94,48 +91,35 @@ CATCH_NOUNIT_RX = re.compile(
 # Навеска
 NABECKA_RX = re.compile(r"навеск", re.I)
 
-# Точки на водоёме
+# Точки на водоёме (расширено)
 LOCATION_RX = re.compile(
-    r"основной водо[её]м|дальний угол|ближний угол|у плотин\w*|"
+    r"основной водо[её]м|дальний угол|у плотин\w*|"
     r"у коряг\w*|у входа|у выхода|центр\w*|мелководь\w*|"
     r"глубок\w* участок|у берега|у причала|у мостка|"
     r"у дамбы|у стены|у кустов|у травы|у тростника|"
     r"у затопленн\w* дерев\w*|у ямы|у бровки|у сваи|"
     r"у трубы|у слива|у аэратора|у кормушк\w*|"
     r"у обрыва|у отмели|у переката|у залива|у бухты|"
-    # --- ориентиры Красногорска ---
-    r"(?:у\s+|на\s+)?(?:стар\w*\s+|нов\w*\s+)?понтон\w*|"
-    r"(?:у\s+|на\s+)?(?:стар\w*\s+|нов\w*\s+)?пантон\w*|"
-    r"(?:на\s+|у\s+)?переходн\w*(?:\s+мост\w*)?|"
-    r"(?:на\s+|у\s+)?сер\w*\s+мост\w*|"
-    r"(?:на\s+|у\s+|в\s+)?баб\w*\s+уг[ол]\w*|"
-    r"(?:на\s+|у\s+|в\s+)?женск\w*\s+уг[ол]\w*|"
-    r"(?:на\s+)?пляж\w*|"
-    r"под\s+дуб\w*|под\s+ив\w*|"
-    r"под\s+администрац\w*|под\s+стадион\w*|"
-    r"на\s+запуск\w*|"
-    r"(?:на\s+|у\s+)?(?:стар\w*\s+)?спорт\s*-?\s*зон\w*",
+    r"понтон\w*|пантон\w*|старый понтон|новый пантон|"
+    r"новый понтон|старый пантон|переходной серый мост|"
+    r"бабий угол|женский угол|пляж|под дубами|под ивой|"
+    r"под администрацией|под стадионом|на запуске|"
+    r"на спорт зоне|старая спорт зона",
     re.I,
 )
 
-# Приманки
+# Приманки (расширено)
 LURE_RX = re.compile(
-    r"вертушк\w*|воблер\w*|резин\w*|мушк\w*|блесна|блёсна|"
+    r"вертушк\w*|воблер\w*|резин\w*|мушк\w*|блесна|"
     r"черв\w*|опарыш\w*|мотыл\w*|пенопласт|тесто|сыр|"
     r"бойл\w*|поппер\w*|цикад\w*|колебалк\w*|вращалк\w*|"
     r"силикон\w*|твистер\w*|виброхвост\w*|рапал\w*|"
     r"минноу|кренк\w*|джерк\w*|спининг\w*|донк\w*|"
     r"фидер\w*|поплавочн\w*|мормышк\w*|балда|стример\w*|"
     r"нимф\w*|сухая мушка|мокрая мушка|личинк\w*|"
-    r"мотылёк|ручейник|"
-    # --- конкретные приманки форелевиков ---
-    r"маг+от\w*|"
-    r"светонакоп\w*(?:\s+черв\w*)?|"
-    r"стре[йт]ч\w*|"
-    r"бобр\w*\s*хвост\w*|"
-    r"пламп\w*|"
-    r"биг[\s\-]*джуниор\w*|джуниор\w*|"
-    r"big[\s\-]*junior",
+    r"мотылёк|ручейник|магот\w*|светонакоп\w*|"
+    r"светонакопительный|стрейч|бобриный хвост|"
+    r"пламп\w*|Биг Джуниор",
     re.I,
 )
 
@@ -161,24 +145,6 @@ SENTENCE_RX = re.compile(r"[.!?…]")
 # Запрещённые слова между ключевым словом и числом
 BAD_BETWEEN_RX = re.compile(r"корм|прикорм|пеллет|смес", re.I)
 
-# Погодный код (WMO) -> описание
-WMO_RU = {
-    0: "ясно", 1: "преимущественно ясно", 2: "переменная облачность",
-    3: "пасмурно", 45: "туман", 48: "туман с изморозью",
-    51: "морось", 53: "морось", 55: "сильная морось",
-    56: "ледяная морось", 57: "ледяная морось",
-    61: "небольшой дождь", 63: "дождь", 65: "сильный дождь",
-    66: "ледяной дождь", 67: "ледяной дождь",
-    71: "небольшой снег", 73: "снег", 75: "сильный снег", 77: "снежная крупа",
-    80: "небольшой ливень", 81: "ливень", 82: "сильный ливень",
-    85: "снегопад", 86: "сильный снегопад",
-    95: "гроза", 96: "гроза с градом", 99: "гроза с градом",
-}
-
-CHEV = ('<svg class="chev" viewBox="0 0 24 24" width="13" height="13" fill="none" '
-        'stroke="currentColor" stroke-width="3" stroke-linecap="round">'
-        '<path d="M6 15l6-6 6 6"/></svg>')
-
 TEMPLATE = """<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -187,46 +153,40 @@ TEMPLATE = """<!DOCTYPE html>
 <title>Форель Красногорск</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
-:root{--card:#1e293b;--line:#334155;--txt:#e2e8f0;--mut:#94a3b8}
-*{box-sizing:border-box}
-body{font-family:system-ui,-apple-system,sans-serif;margin:0 auto;padding:12px;background:#0f172a;color:var(--txt);max-width:860px}
-h1{font-size:1.35rem;background:linear-gradient(90deg,#38bdf8,#a78bfa);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin:10px 0 12px}
-.top{display:flex;flex-wrap:wrap;gap:4px 18px;align-items:baseline;background:var(--card);border-radius:14px;padding:10px 14px;font-size:.85rem}
-.top .dt{color:#7dd3fc;font-variant-numeric:tabular-nums}
-.top .wx{color:var(--mut)}
-.ctrl{display:flex;gap:14px;font-size:.72rem;margin:6px 2px 0;color:var(--mut)}
-.ctrl a{cursor:pointer}
-.card{background:var(--card);border-radius:14px;padding:14px;margin:8px 0}
+body{font-family:system-ui,-apple-system,sans-serif;margin:0 auto;padding:12px;background:#0f172a;color:#e2e8f0;max-width:820px}
+h1{font-size:1.4rem;background:linear-gradient(90deg,#38bdf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.card{background:#1e293b;border-radius:14px;padding:14px;margin:10px 0}
 .big{font-size:1.8rem;font-weight:800;color:#fbbf24}
-details.sec{margin:10px 0}
-details.sec>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--card);border-radius:14px;font-size:1.05rem;font-weight:700;user-select:none;transition:background .15s}
-details.sec>summary:hover{background:#273449}
-details.sub>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:8px 12px;background:#162136;border-radius:10px;font-size:.92rem;font-weight:600;user-select:none;margin:8px 0 4px;color:#cbd5e1}
-details.sub>summary:hover{background:#1b2a44}
-summary::-webkit-details-marker{display:none}
-summary .chev{margin-left:auto;color:var(--mut);transition:transform .18s;flex:none}
-details:not([open])>summary .chev{transform:rotate(180deg)}
 table{width:100%;border-collapse:collapse;font-size:.8rem}
-td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+td,th{padding:6px 4px;border-bottom:1px solid #334155;text-align:left;vertical-align:top}
 a{color:#7dd3fc;text-decoration:none}
 a:hover{text-decoration:underline}
-.note{font-size:.78rem;color:var(--mut)}
-.q{color:var(--mut);font-size:.75rem}
+.note{font-size:.8rem;color:#94a3b8}
+.q{color:#94a3b8;font-size:.75rem}
+/* --- сворачиваемые блоки --- */
+details{margin:10px 0;border-radius:14px;border:1px solid #334155;overflow:hidden;background:#1e293b}
+summary{cursor:pointer;padding:10px 14px;font-weight:800;color:#38bdf8;background:linear-gradient(90deg,#0f172a,#1e293b);list-style:none;user-select:none}
+summary:hover{background:#334155}
+summary::marker{display:none}
+details>.card{margin:0;border-radius:0;border:none;padding:14px}
+/* --- верхний бар --- */
+#topbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:.95rem}
+#topbar b{color:#fbbf24}
 </style>
 </head>
 <body>
-
-<div class="top">
-  <span class="dt" id="now">…</span>
-  <span class="wx" id="wx">Погода загружается…</span>
-</div>
-<div class="ctrl"><span>Секции можно сворачивать:</span><a id="openall">развернуть всё</a><a id="closeall">свернуть всё</a></div>
-
 <h1>🎣 Форель в Красногорске</h1>
 
-<details class="sec" data-id="cond" open>
-<summary><span>🎟 Условия рыбалки</span>__CHEV__</summary>
+<div class="card" id="topbar">
+  <span><b>📅 Сегодня:</b> <span id="curDate">—</span></span>
+  <span><b>⏰ Время:</b> <span id="curTime">—</span></span>
+  <span><b>🌤 Погода:</b> <span id="curTemp">—</span>°C • <span id="curPress">—</span> мм рт.ст. • осадки <span id="curPrecip">—</span> мм</span>
+</div>
+
+<details open>
+<summary style="cursor:pointer; list-style:none; font-weight:800; font-size:1.2rem; color:#38bdf8; padding:8px 14px;">🎟 Условия рыбалки</summary>
 <div class="card">
+  <h2>🎟 Условия рыбалки</h2>
   <table>
     <tr><td>06:00–19:00</td><td><b>4000 ₽</b></td></tr>
     <tr><td>12:00–19:00</td><td><b>2200 ₽</b></td></tr>
@@ -251,8 +211,8 @@ a:hover{text-decoration:underline}
 </div>
 </details>
 
-<details class="sec" data-id="bal" open>
-<summary><span>🐟 Остаток форели в водоёме</span>__CHEV__</summary>
+<details open>
+<summary style="cursor:pointer; list-style:none; font-weight:800; font-size:1.2rem; color:#38bdf8; padding:8px 14px;">🐟 Остаток форели в водоёме</summary>
 <div class="card">
   <div class="big" id="rem">—</div>
   <div class="note">
@@ -260,128 +220,71 @@ a:hover{text-decoration:underline}
     последний запуск: <span id="dsl">—</span> • обновлено <span id="upd2"></span>
   </div>
 </div>
-<div class="card" id="balbox"><canvas id="bal"></canvas></div>
-<details class="sub" data-id="log" open>
-<summary><span>Журнал запусков и выловов</span>__CHEV__</summary>
-<div class="card"><table id="ev"></table><div class="note">Дата в таблице = дата события из текста, а не дата поста.</div></div>
-</details>
 </details>
 
-<details class="sec" data-id="act" open>
-<summary><span>📊 Активность обсуждений с 2024</span>__CHEV__</summary>
+<details open>
+<summary style="cursor:pointer; list-style:none; font-weight:800; font-size:1.2rem; color:#38bdf8; padding:8px 14px;">📈 Баланс</summary>
+<div class="card" id="balbox"><canvas id="bal"></canvas></div>
+</details>
+
+<details open>
+<summary style="cursor:pointer; list-style:none; font-weight:800; font-size:1.2rem; color:#38bdf8; padding:8px 14px;">📓 Журнал запусков и выловов</summary>
+<div class="card"><table id="ev"></table></div>
+</details>
+<div class="note">Дата в таблице = дата события из текста, а не дата поста.</div>
+
+<details open>
+<summary style="cursor:pointer; list-style:none; font-weight:800; font-size:1.2rem; color:#38bdf8; padding:8px 14px;">📊 Активность обсуждений с 2024</summary>
+
 <div class="card">
   <div class="note" id="prog"></div>
   <div class="big" style="color:#38bdf8" id="total">0</div>
   <div class="note">постов про форель за <span id="days">0</span> активных дней</div>
 </div>
-<details class="sub" data-id="monthly" open>
-<summary><span>Активность по месяцам (постов/день)</span>__CHEV__</summary>
+<h3>Активность по месяцам (постов/день)</h3>
 <div class="card"><canvas id="m"></canvas></div>
-</details>
-<details class="sub" data-id="press" open>
-<summary><span>Клёв vs давление</span>__CHEV__</summary>
+<h3>Клёв vs давление</h3>
 <div class="card"><canvas id="p"></canvas></div>
-</details>
-<details class="sub" data-id="days" open>
-<summary><span>Последние активные дни</span>__CHEV__</summary>
-<div class="card">
-  <table id="t"></table>
-  <div class="note">Температура — минимум ночью → максимум днём (архив Open-Meteo, Красногорск). Давление в мм рт. ст., осадки в мм.</div>
-</div>
-</details>
+<h3>Последние активные дни</h3>
+<div class="card"><table id="t"></table></div>
+<div class="note">Температура в таблице — средняя температура воздуха за сутки (по данным Open-Meteo).</div>
 </details>
 
-<details class="sec" data-id="spots" open>
-<summary><span>🎣 Перспективные точки и приманки</span>__CHEV__</summary>
-<details class="sub" data-id="locs" open>
-<summary><span>Где лучше клюёт</span>__CHEV__</summary>
+<details open>
+<summary style="cursor:pointer; list-style:none; font-weight:800; font-size:1.2rem; color:#38bdf8; padding:8px 14px;">🎣 Перспективные точки и приманки</summary>
+
 <div class="card">
+  <h3>Где лучше клюёт</h3>
   <div class="note">По отчётам рыбаков с начала 2024 года</div>
   <table id="locs"></table>
 </div>
-</details>
-<details class="sub" data-id="lure" open>
-<summary><span>Какая приманка лучше работает</span>__CHEV__</summary>
-<div class="card"><canvas id="lure"></canvas></div>
-</details>
-<details class="sub" data-id="time" open>
-<summary><span>В какое время лучше клюёт</span>__CHEV__</summary>
-<div class="card"><canvas id="time"></canvas></div>
-</details>
+<div class="card">
+  <h3>Какая приманка лучше работает</h3>
+  <canvas id="lure"></canvas>
+</div>
+<div class="card">
+  <h3>В какое время лучше клюёт</h3>
+  <canvas id="time"></canvas>
+</div>
 </details>
 
 <script>
 try {
     const D = __DATA__;
 
-    /* ---------- Сворачиваемые секции (с запоминанием) ---------- */
-    const STORE_KEY = 'fk_sections_v1';
-    let savedSections = {};
-    try { savedSections = JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch (e) {}
-    document.querySelectorAll('details[data-id]').forEach(d => {
-        if (savedSections[d.dataset.id] !== undefined) d.open = !!savedSections[d.dataset.id];
-        d.addEventListener('toggle', () => {
-            savedSections[d.dataset.id] = d.open;
-            try { localStorage.setItem(STORE_KEY, JSON.stringify(savedSections)); } catch (e) {}
-        });
-    });
-    const openAll = document.getElementById('openall');
-    const closeAll = document.getElementById('closeall');
-    if (openAll) openAll.onclick = () => document.querySelectorAll('details[data-id]').forEach(d => { d.open = true; });
-    if (closeAll) closeAll.onclick = () => document.querySelectorAll('details[data-id]').forEach(d => { d.open = false; });
-
-    /* ---------- Часы (МСК) ---------- */
-    function tickClock() {
-        const el = document.getElementById('now');
-        if (!el) return;
-        try {
-            el.textContent = new Date().toLocaleString('ru-RU', {
-                timeZone: 'Europe/Moscow', weekday: 'long', day: 'numeric',
-                month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
-            });
-        } catch (e) { el.textContent = new Date().toLocaleString('ru-RU'); }
+    /* --- верхняя строка: дата, время, текущая погода --- */
+    function renderTop() {
+        const now = new Date();
+        document.getElementById('curDate').textContent = now.toLocaleDateString('ru-RU', {day:'numeric', month:'long', year:'numeric'});
+        document.getElementById('curTime').textContent = now.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+        const cw = (D.current_weather || {});
+        document.getElementById('curTemp').textContent = (cw.temp !== undefined && cw.temp !== null) ? cw.temp : '—';
+        document.getElementById('curPress').textContent = (cw.pressure !== undefined && cw.pressure !== null) ? cw.pressure : '—';
+        document.getElementById('curPrecip').textContent = (cw.precip !== undefined && cw.precip !== null) ? cw.precip : '—';
     }
-    tickClock(); setInterval(tickClock, 1000);
+    renderTop();
+    setInterval(renderTop, 30000);
 
-    /* ---------- Текущая погода на водоёме ---------- */
-    const WMO = {0:'ясно',1:'преимущественно ясно',2:'переменная облачность',3:'пасмурно',45:'туман',48:'туман с изморозью',51:'морось',53:'морось',55:'сильная морось',56:'ледяная морось',57:'ледяная морось',61:'небольшой дождь',63:'дождь',65:'сильный дождь',66:'ледяной дождь',67:'ледяной дождь',71:'небольшой снег',73:'снег',75:'сильный снег',77:'снежная крупа',80:'небольшой ливень',81:'ливень',82:'сильный ливень',85:'снегопад',86:'сильный снегопад',95:'гроза',96:'гроза с градом',99:'гроза с градом'};
-    const fmtT = v => String(Math.round(v * 10) / 10).replace('-', '−');
-    function wxLine(w) {
-        if (!w || w.temp === null || w.temp === undefined) return '';
-        const parts = [];
-        parts.push(fmtT(w.temp) + '°C' + (w.feels !== null && w.feels !== undefined ? ' (ощущ. ' + fmtT(w.feels) + '°)' : ''));
-        if (w.desc) parts.push(w.desc);
-        if (w.wind !== null && w.wind !== undefined) parts.push('ветер ' + w.wind + ' м/с');
-        if (w.hum !== null && w.hum !== undefined) parts.push('влажн. ' + w.hum + '%');
-        if (w.pressure !== null && w.pressure !== undefined) parts.push(Math.round(w.pressure) + ' мм рт. ст.');
-        return parts.join(' • ');
-    }
-    function renderWx(w, live) {
-        const el = document.getElementById('wx');
-        if (!el) return;
-        const t = wxLine(w);
-        el.textContent = t
-            ? ('На водоёме сейчас: ' + t + (live ? '' : ' (на момент сборки)'))
-            : 'Погода временно недоступна';
-    }
-    if (D.now) renderWx(D.now, false);
-    fetch('https://api.open-meteo.com/v1/forecast?latitude=55.8406&longitude=37.3230&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,pressure_msl&timezone=Europe%2FMoscow')
-        .then(r => r.json())
-        .then(j => {
-            const c = j.current || {};
-            if (c.temperature_2m === undefined) return;
-            renderWx({
-                temp: c.temperature_2m,
-                feels: c.apparent_temperature,
-                desc: WMO[c.weather_code] || '',
-                wind: c.wind_speed_10m,
-                hum: c.relative_humidity_2m,
-                pressure: (c.pressure_msl !== undefined) ? c.pressure_msl * 0.75006 : null
-            }, true);
-        })
-        .catch(() => { if (!D.now) renderWx(null, false); });
-
-    /* ---------- Остаток форели ---------- */
     const B = D.balance || {};
     document.getElementById('bs').textContent = B.start || '2026-09-01';
     document.getElementById('st').textContent = B.total_stocked || 0;
@@ -417,32 +320,63 @@ try {
         }
     }
     if (D.table && D.table.length > 0) {
-        document.getElementById('t').innerHTML = '<tr><th>Дата</th><th>П</th><th title="минимум ночью → максимум днём">t° ночь→день</th><th>Давл</th><th>Осадки</th><th></th></tr>' + D.table.map(r => `<tr><td>${r.day}</td><td>${r.posts}</td><td>${r.temp ?? '—'}</td><td>${r.pressure ?? '—'}</td><td>${r.precip ?? '—'}</td><td>${(r.links || []).map((u, i) => `<a href="${u}" target="_blank" rel="noopener">#${i + 1}</a>`).join(' ')}</td></tr>`).join('');
+        document.getElementById('t').innerHTML = '<tr><th>Дата</th><th>П</th><th>t° (средн.)</th><th>Давл</th><th>Осадки</th><th></th></tr>' + D.table.map(r => `<tr><td>${r.day}</td><td>${r.posts}</td><td>${r.temp ?? '—'}</td><td>${r.pressure ?? '—'}</td><td>${r.precip ?? '—'}</td><td>${(r.links || []).map((u, i) => `<a href="${u}" target="_blank" rel="noopener">#${i + 1}</a>`).join(' ')}</td></tr>`).join('');
     }
     if (D.locations && D.locations.length > 0) {
         document.getElementById('locs').innerHTML = '<tr><th>Дата</th><th>Точка</th><th>Приманка</th><th>Время</th><th>Горизонт</th><th>Улов</th><th>Цитата</th></tr>' + D.locations.map(r => `<tr><td>${r.day}</td><td>${r.location || '—'}</td><td>${r.lure || '—'}</td><td>${r.time || '—'}</td><td>${r.depth || '—'}</td><td>${r.catch || '—'}</td><td class="q"><a href="${r.url}" target="_blank" rel="noopener">${r.quote}</a></td></tr>`).join('');
     } else { document.getElementById('locs').innerHTML = '<tr><td class="note">Пока нет отчётов.</td></tr>'; }
-    if (D.lure_stats && Object.keys(D.lure_stats).length > 0) {
+    if (D.lure_stats) {
         new Chart(document.getElementById('lure'), {
             type: 'bar',
-            data: { labels: Object.keys(D.lure_stats), datasets: [{ label: 'Успешных случаев', data: Object.values(D.lure_stats), backgroundColor: '#38bdf8' }] },
-            options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } } }
+            data: {
+                labels: Object.keys(D.lure_stats),
+                datasets: [{
+                    label: 'Успешных случаев',
+                    data: Object.values(D.lure_stats),
+                    backgroundColor: '#38bdf8'
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } }
+            }
         });
     }
-    if (D.time_stats && Object.keys(D.time_stats).length > 0) {
+    if (D.time_stats) {
         new Chart(document.getElementById('time'), {
             type: 'bar',
-            data: { labels: Object.keys(D.time_stats), datasets: [{ label: 'Успешных случаев', data: Object.values(D.time_stats), backgroundColor: '#4ade80' }] },
-            options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } } }
+            data: {
+                labels: Object.keys(D.time_stats),
+                datasets: [{
+                    label: 'Успешных случаев',
+                    data: Object.values(D.time_stats),
+                    backgroundColor: '#4ade80'
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } }
+            }
         });
     }
+
+    /* --- сворачиваем/разворачиваем информационные блоки --- */
+    document.querySelectorAll('.card').forEach(function(card){
+        if (card.closest('details') || card.id === 'topbar') return;
+        var d = document.createElement('details');
+        d.open = true;
+        var s = document.createElement('summary');
+        var h = card.querySelector('h2, h3');
+        s.textContent = h ? h.textContent.trim() : 'Блок';
+        card.parentNode.insertBefore(d, card);
+        d.appendChild(s);
+        d.appendChild(card);
+    });
+
 } catch (err) { console.error(err); }
 </script>
 </body>
 </html>"""
-
-TEMPLATE = TEMPLATE.replace("__CHEV__", CHEV)
-
 
 def page_url(page_number):
     if page_number == 1:
@@ -735,11 +669,11 @@ def find_stock_catch(text, post_dt):
 
 def extract_location(text):
     match = LOCATION_RX.search(text)
-    return match.group(0).strip() if match else None
+    return match.group(0) if match else None
 
 def extract_lure(text):
     match = LURE_RX.search(text)
-    return match.group(0).strip() if match else None
+    return match.group(0) if match else None
 
 def extract_time(text):
     match = TIME_RX.search(text)
@@ -781,42 +715,7 @@ def extract_catch(text):
                 return group + " шт."
     return None
 
-def load_now_weather():
-    """Текущая погода на водоёме (встраивается в страницу при сборке)."""
-    try:
-        response = requests.get(
-            "https://api.open-meteo.com/v1/forecast",
-            params={
-                "latitude": LAT,
-                "longitude": LON,
-                "current": "temperature_2m,apparent_temperature,weather_code,"
-                           "wind_speed_10m,relative_humidity_2m,pressure_msl",
-                "timezone": "Europe/Moscow",
-            },
-            timeout=40,
-        )
-        current = (response.json() or {}).get("current") or {}
-        if not current or current.get("temperature_2m") is None:
-            return None
-        pressure_hpa = current.get("pressure_msl")
-        return {
-            "temp": current.get("temperature_2m"),
-            "feels": current.get("apparent_temperature"),
-            "desc": WMO_RU.get(current.get("weather_code"), ""),
-            "wind": current.get("wind_speed_10m"),
-            "hum": current.get("relative_humidity_2m"),
-            "pressure": round(pressure_hpa * 0.75006, 1) if pressure_hpa is not None else None,
-        }
-    except Exception as error:
-        print("Текущая погода недоступна:", error)
-        return None
-
 def load_weather():
-    """
-    Дневная погода по датам: НОЧНОЙ МИНИМУМ и ДНЕВНОЙ МАКСИМУМ температуры,
-    сумма осадков и среднее давление. Единый расчёт и для архива, и для
-    свежих дней (из почасовых данных берутся min/max, а не среднее).
-    """
     weather = {}
     today = date.today()
 
@@ -827,24 +726,21 @@ def load_weather():
                 "latitude": 55.82,
                 "longitude": 37.33,
                 "start_date": START_DATE,
-                "end_date": str(today - timedelta(days=5)),
-                "daily": "temperature_2m_max,temperature_2m_min,"
-                         "precipitation_sum,pressure_msl_mean",
+                "end_date": str(today - timedelta(days=1)),
+                "daily": "temperature_2m_mean,precipitation_sum,pressure_msl_mean",
                 "timezone": "Europe/Moscow",
             },
             timeout=60,
         )
         daily = response.json().get("daily") or {}
-        tmax_list = daily.get("temperature_2m_max") or []
-        tmin_list = daily.get("temperature_2m_min") or []
+        temps = daily.get("temperature_2m_mean") or []
         precips = daily.get("precipitation_sum") or []
         pressures = daily.get("pressure_msl_mean") or []
 
         for index, day in enumerate(daily.get("time") or []):
             pressure_hpa = pressures[index] if index < len(pressures) else None
             weather[day] = {
-                "temp_max": tmax_list[index] if index < len(tmax_list) else None,
-                "temp_min": tmin_list[index] if index < len(tmin_list) else None,
+                "temp": temps[index] if index < len(temps) else None,
                 "precip": precips[index] if index < len(precips) else None,
                 "pressure": (
                     round(pressure_hpa * 0.75006, 1)
@@ -861,8 +757,8 @@ def load_weather():
             params={
                 "latitude": 55.82,
                 "longitude": 37.33,
-                "start_date": str(today - timedelta(days=6)),
-                "end_date": str(today),
+                "start_date": str(today - timedelta(days=2)),
+                "end_date": str(today + timedelta(days=2)),
                 "hourly": "temperature_2m,precipitation,pressure_msl",
                 "timezone": "Europe/Moscow",
             },
@@ -884,10 +780,8 @@ def load_weather():
             day_pressures = [pressures[i] for i in indexes if i < len(pressures) and pressures[i] is not None]
 
             record = weather.get(day) or {}
-            # Заполняем только дни, которых нет в архиве — архив точнее.
-            if day_temps and record.get("temp_max") is None:
-                record["temp_max"] = round(max(day_temps), 1)
-                record["temp_min"] = round(min(day_temps), 1)
+            if day_temps and record.get("temp") is None:
+                record["temp"] = round(sum(day_temps) / len(day_temps), 1)
             if day_precips and record.get("precip") is None:
                 record["precip"] = round(sum(day_precips), 1)
             if day_pressures and record.get("pressure") is None:
@@ -897,22 +791,6 @@ def load_weather():
         print("Свежая погода недоступна:", error)
 
     return weather
-
-def fmt_temp_range(record):
-    """Строка вида '−3…+7°': ночной минимум → дневной максимум."""
-    tmin = (record or {}).get("temp_min")
-    tmax = (record or {}).get("temp_max")
-
-    def fmt(value):
-        return f"{value:.0f}".replace("-", "−")
-
-    if tmin is None and tmax is None:
-        return None
-    if tmin is not None and tmax is not None:
-        return f"{fmt(tmin)}…{fmt(tmax)}°"
-    if tmax is not None:
-        return f"до {fmt(tmax)}°"
-    return f"от {fmt(tmin)}°"
 
 def main():
     os.makedirs(PAGES_DIR, exist_ok=True)
@@ -1127,7 +1005,6 @@ def build(database, state, last_page):
         day_events.setdefault(event_day, {})["catch"] = record
 
     weather = load_weather()
-    now_weather = load_now_weather()
 
     monthly_activity = defaultdict(list)
     pressure_activity = {"<745": [], "745-760": [], ">760": []}
@@ -1167,7 +1044,7 @@ def build(database, state, last_page):
         table.append({
             "day": day_value,
             "posts": len(days[day_value]),
-            "temp": fmt_temp_range(w),
+            "temp": w.get("temp"),
             "pressure": w.get("pressure"),
             "precip": w.get("precip"),
             "links": days[day_value][:5],
@@ -1218,9 +1095,6 @@ def build(database, state, last_page):
                     "quote": e["quote"],
                 })
 
-    # Отчёты о точках/приманках: сначала свежие.
-    locations.sort(key=lambda r: (r["day"], r["url"]), reverse=True)
-
     # Статистика приманок и времени суток.
     lure_stats = defaultdict(int)
     time_stats = defaultdict(int)
@@ -1230,6 +1104,10 @@ def build(database, state, last_page):
             lure_stats[report["lure"]] += 1
         if report["time"]:
             time_stats[report["time"]] += 1
+
+    # Текущая погода из загруженных данных для верхней строки
+    today_str = str(date.today())
+    current_weather = weather.get(today_str) or {}
 
     balance = {
         "start": BALANCE_START,
@@ -1251,10 +1129,14 @@ def build(database, state, last_page):
             "stats": statistics,
             "table": table,
             "balance": balance,
-            "locations": locations[:50],  # Последние 50 отчётов.
-            "lure_stats": dict(sorted(lure_stats.items(), key=lambda item: -item[1])[:12]),
+            "current_weather": {
+                "temp": current_weather.get("temp"),
+                "pressure": current_weather.get("pressure"),
+                "precip": current_weather.get("precip"),
+            },
+            "locations": locations[:50],
+            "lure_stats": dict(sorted(lure_stats.items(), key=lambda item: -item[1])[:10]),
             "time_stats": dict(sorted(time_stats.items(), key=lambda item: -item[1])[:10]),
-            "now": now_weather,
         },
         ensure_ascii=False,
     ).replace("</", "<\\/")
