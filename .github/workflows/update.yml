@@ -1,29 +1,36 @@
-name: Forel agent
+name: build
+
 on:
-  push:
   schedule:
-    - cron: '0 5 * * *'
+    - cron: "0 */6 * * *"
   workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
-  update:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - name: Install
-        run: pip install curl_cffi beautifulsoup4 lxml
-      - name: Run agent
-        run: python agent.py
-      - name: Save progress
+          python-version: "3.11"
+
+      - run: pip install curl_cffi beautifulsoup4 lxml
+
+      - name: Build site
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_MODEL: "meta-llama/llama-3.3-70b-instruct:free"
+          LLM_MAX_POSTS: "20"
+        run: python main.py
+
+      - name: Commit results
         run: |
-          git config user.name "forel-bot"
-          git config user.email "forel-bot@users.noreply.github.com"
+          git config user.name "bot"
+          git config user.email "bot@users.noreply.github.com"
           git add -A
-          git commit -m "agent update" || echo "nothing to commit"
+          git commit -m "update" || echo "no changes"
           git push
