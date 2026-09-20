@@ -58,7 +58,7 @@ CATCH_NOUNIT_RX = re.compile(r"(вылов\w*|итог\w*)\s*[:\-–—]?\s*(\d{
 
 NABECKA_RX = re.compile(r"навеск", re.I)
 
-# Точки на водоёме (расширено)
+# Точки на водоёме
 LOCATION_RX = re.compile(
     r"основной водо[её]м|дальний угол|у плотин\w*|у коряг\w*|у входа|у выхода|центр\w*|мелководь\w*|"
     r"глубок\w* участок|у берега|у причала|у мостка|у дамбы|у стены|у кустов|у травы|у тростника|"
@@ -68,7 +68,7 @@ LOCATION_RX = re.compile(
     r"под администрацией|под стадионом|на запуске|на спорт зоне|старая спорт зона", re.I,
 )
 
-# Приманки (расширено)
+# Приманки
 LURE_RX = re.compile(
     r"вертушк\w*|воблер\w*|резин\w*|мушк\w*|блесна|черв\w*|опарыш\w*|мотыл\w*|пенопласт|тесто|сыр|"
     r"бойл\w*|поппер\w*|цикад\w*|колебалк\w*|вращалк\w*|силикон\w*|твистер\w*|виброхвост\w*|рапал\w*|"
@@ -81,8 +81,6 @@ TIME_RX = re.compile(r"утро|вечер|ночь|рассвет|закат|д
 DEPTH_RX = re.compile(r"дно|полвод\w*|поверхност\w*|у дна|в полвод\w*|верхний слой|средний слой|придонный слой|у поверхност\w*|под берегом|на глубин[еу] (\d+)\s*м|на (\d+)\s*м", re.I)
 SENTENCE_RX = re.compile(r"[.!?…]")
 BAD_BETWEEN_RX = re.compile(r"корм|прикорм|пеллет|смес", re.I)
-
-# Ключевые слова для отчётов об улове
 CATCH_REPORT_RX = re.compile(r"поймал|выловил|улов|взял|штук|кг.*форел|форел.*кг|клюёт|клёв|сработал|отличн", re.I)
 
 TEMPLATE = """<!DOCTYPE html>
@@ -192,8 +190,7 @@ details>.card{margin:0;border-radius:0;border:none;padding:14px}
 </div>
 <div class="card">
   <h3>В какое время лучше клюёт</h3>
-  <canvas id="time"></canvas>
-</div>
+  <canvas id="time"></canvas></div>
 </details>
 
 <script>
@@ -464,40 +461,76 @@ def extract_catch(text):
             if g: return g + " шт."
     return None
 
+def safe_get_list(lst, idx, default=None):
+    """Безопасное получение элемента списка."""
+    if lst and isinstance(lst, list) and 0 <= idx < len(lst):
+        return lst[idx]
+    return default
+
 def load_weather():
     weather = {}
     today = date.today()
+    
+    # 1. Архив
     try:
         r = requests.get("https://archive-api.open-meteo.com/v1/archive", params={
             "latitude":55.82, "longitude":37.33, "start_date":START_DATE,
             "end_date":str(today-timedelta(days=1)),
             "daily":"temperature_2m_mean,precipitation_sum,pressure_msl_mean", "timezone":"Europe/Moscow"}, timeout=60)
-        d = r.json().get("daily") or {}
-        for i, day in enumerate(d.get("time") or []):
+        data = r.json()
+        daily = data.get("daily") or {}
+        times = daily.get("time") or []
+        temps = daily.get("temperature_2m_mean") or []
+        precips = daily.get("precipitation_sum") or []
+        pressures = daily.get("pressure_msl_mean") or []
+        
+        for i, day in enumerate(times):
+            t_val = safe_get_list(temps, i)
+            p_val = safe_get_list(precips, i)
+            pr_val = safe_get_list(pressures, i)
+            
             weather[day] = {
-                "temp": (d.get("temperature_2m_mean") or [])[i] if i < len(d.get("temperature_2m_mean") or []) else None,
-                "precip": (d.get("precipitation_sum") or [])[i] if i < len(d.get("precipitation_sum") or []) else None,
-                "pressure": round((d.get("pressure_msl_mean") or [])[i]*0.75006, 1) if i < len(d.get("pressure_msl_mean") or []) and (d.get("pressure_msl_mean") or [])[i] else None
+                "temp": t_val,
+                "precip": p_val,
+                "pressure": round(pr_val * 0.75006, 1) if pr_val is not None else None
             }
-    except Exception as e: print("Архив погоды:", e)
+    except Exception as e: 
+        print(f"Архив погоды ошибка: {e}")
+
+    # 2. Прогноз (свежие данные)
     try:
         r = requests.get("https://api.open-meteo.com/v1/forecast", params={
             "latitude":55.82, "longitude":37.33,
             "start_date":str(today-timedelta(days=2)), "end_date":str(today+timedelta(days=2)),
             "hourly":"temperature_2m,precipitation,pressure_msl", "timezone":"Europe/Moscow"}, timeout=60)
-        h = r.json().get("hourly") or {}
+        data = r.json()
+        hourly = data.get("hourly") or {}
+        h_times = hourly.get("time") or []
+        h_temps = hourly.get("temperature_2m") or []
+        h_precips = hourly.get("precipitation") or []
+        h_pressures = hourly.get("pressure_msl") or []
+        
         buckets = defaultdict(list)
-        for i, t in enumerate(h.get("time") or []): buckets[t[:10]].append(i)
+        for i, t_stamp in enumerate(h_times):
+            if t_stamp:
+                buckets[t_stamp[:10]].append(i)
+        
         for day, idxs in buckets.items():
             rec = weather.get(day) or {}
-            ts = [h["temperature_2m"][i] for i in idxs if i<len(h["temperature_2m"]) and h["temperature_2m"][i] is not None]
-            ps = [h["precipitation"][i] for i in idxs if i<len(h["precipitation"]) and h["precipitation"][i] is not None]
-            pr = [h["pressure_msl"][i] for i in idxs if i<len(h["pressure_msl"]) and h["pressure_msl"][i] is not None]
+            
+            # Собираем значения только если индекс валиден
+            ts = [h_temps[i] for i in idxs if 0 <= i < len(h_temps) and h_temps[i] is not None]
+            ps = [h_precips[i] for i in idxs if 0 <= i < len(h_precips) and h_precips[i] is not None]
+            prs = [h_pressures[i] for i in idxs if 0 <= i < len(h_pressures) and h_pressures[i] is not None]
+            
             if ts and rec.get("temp") is None: rec["temp"] = round(sum(ts)/len(ts), 1)
             if ps and rec.get("precip") is None: rec["precip"] = round(sum(ps), 1)
-            if pr and rec.get("pressure") is None: rec["pressure"] = round(sum(pr)/len(pr)*0.75006, 1)
+            if prs and rec.get("pressure") is None: rec["pressure"] = round(sum(prs)/len(prs)*0.75006, 1)
+            
             weather[day] = rec
-    except Exception as e: print("Прогноз погоды:", e)
+    except Exception as e: 
+        print(f"Прогноз погоды ошибка: {e}")
+        
     return weather
 
 def main():
@@ -603,13 +636,19 @@ def build(db, state, last_page):
     monthly = defaultdict(list)
     for d, urls in days.items(): monthly[d[:7]].append(len(urls))
 
-    # Аналитика давления
+    # Аналитика давления (защищенная)
     p_groups = {"Низкое (<745)": [], "Норма (745-758)": [], "Высокое (>758)": []}
     p_catches = {"Низкое (<745)": [], "Норма (745-758)": [], "Высокое (>758)": []}
+    
     for d in days:
-        p = (weather.get(d) or {}).get("pressure")
+        w_data = weather.get(d) or {}
+        p = w_data.get("pressure")
         if p is None: continue
-        grp = "Низкое (<745)" if p < 745 else ("Норма (745-758)" if p <= 758 else "Высокое (>758)")
+        
+        if p < 745: grp = "Низкое (<745)"
+        elif p <= 758: grp = "Норма (745-758)"
+        else: grp = "Высокое (>758)"
+        
         p_groups[grp].append(len(days[d]))
         p_catches[grp].append(day_catch_counts.get(d, 0))
 
