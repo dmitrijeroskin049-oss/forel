@@ -4,277 +4,209 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Основной водоём — Форель</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
 <style>
   :root{
-    --deep:#152b24;
+    --dark:#182e24;
     --green:#2d6a4f;
-    --gold:#c5a059;
-    --bg:#f4f1ea;
-    --text:#222;
+    --accent:#c5a059;
+    --bg:#f4f5f1;
     --card:#fff;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   body{
-    font-family:'Montserrat',sans-serif;
-    background:linear-gradient(135deg,#e8efe6 0%,#def0f5 100%);
-    color:var(--text);
-    line-height:1.55;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:linear-gradient(180deg,#eaece8 0%,#dde2d9 100%);
+    color:#1a1a1a;
+    line-height:1.45;
   }
-  /* Header */
   header{
-    position:relative;
-    background:linear-gradient(160deg,#152b24 0%,#2d5a45 100%);
+    background:var(--dark);
     color:#fff;
-    padding:4rem 1rem 5rem;
     text-align:center;
-    overflow:hidden;
+    padding:2rem 1rem 1.6rem;
+    box-shadow:0 4px 12px rgba(24,46,36,.2);
   }
-  header::before{
-    content:"";
-    position:absolute;
-    inset:0;
-    background:radial-gradient(circle at 20% 30%, rgba(197,160,89,0.12) 0%, transparent 60%),
-               radial-gradient(circle at 80% 70%, rgba(45,106,79,0.25) 0%, transparent 60%);
-  }
-  header h1{
-    position:relative;
-    font-family:'Cormorant Garamond',serif;
-    font-size:clamp(2.8rem,6vw,4.2rem);
-    letter-spacing:3px;
-    text-shadow:0 8px 25px rgba(0,0,0,0.35);
-    margin-bottom:.3rem;
-    font-weight:600;
-  }
-  header .sub{
-    position:relative;
-    font-weight:300;
-    letter-spacing:5px;
-    text-transform:uppercase;
-    opacity:.92;
-    font-size:.9rem;
-  }
+  header h1{font-family:Georgia,"Times New Roman",serif;font-size:2rem;letter-spacing:1.5px;}
+  header .sub{opacity:.85;font-size:.85rem;margin-top:.25rem;}
 
-  /* Layout */
   .wrap{
-    max-width:1150px;
-    margin: -2.5rem auto 3rem;
-    padding:0 1.25rem;
+    max-width:980px;
+    margin:0 auto;
+    padding:1.5rem 1rem 3rem;
     display:grid;
-    grid-template-columns:300px 1fr;
-    gap:2rem;
+    grid-template-columns:260px 1fr;
+    gap:1.5rem;
     align-items:start;
   }
+  @media(max-width:860px){
+    .wrap{grid-template-columns:1fr;}
+  }
 
-  /* Left info cards */
-  .info-col{display:flex;flex-direction:column;gap:1.2rem;}
+  /* --- LEFT COLUMN --- */
+  .side{display:flex;flex-direction:column;gap:1rem;}
   .card{
-    background:rgba(255,255,255,.9);
-    backdrop-filter:blur(12px) saturate(120%);
-    border:1px solid rgba(255,255,255,.5);
-    border-radius:24px;
-    padding:1.4rem 1.3rem;
-    box-shadow:0 20px 40px rgba(21,43,36,.08), 0 2px 10px rgba(21,43,36,.06);
-    transition:transform .2s ease, box-shadow .2s ease;
-  }
-  .card:hover{transform:translateY(-3px);box-shadow:0 25px 50px rgba(21,43,36,.14), 0 4px 15px rgba(21,43,36,.08);}
-  .card h3{
-    font-family:'Cormorant Garamond',serif;
-    font-size:1.35rem;
-    color:var(--deep);
-    margin-bottom:.8rem;
-    border-bottom:2px solid var(--gold);
-    padding-bottom:.3rem;
-    display:inline-block;
-  }
-  .row{
-    display:flex;
-    align-items:center;
-    gap:.9rem;
-    padding:.7rem 0;
-    border-bottom:1px dashed rgba(21,43,36,.12);
-  }
-  .row:last-child{border-bottom:none;}
-  .icon{
-    width:42px;height:42px;
-    flex-shrink:0;
-    border-radius:50%;
-    background:linear-gradient(135deg,var(--green),var(--gold));
-    color:#fff;
-    display:grid;place-items:center;
-    font-size:1.1rem;
-    box-shadow:0 4px 10px rgba(21,43,36,.25);
-  }
-  .label{font-size:.68rem;text-transform:uppercase;letter-spacing:1.2px;color:#777;font-weight:600;}
-  .val{font-weight:600;color:var(--text);font-size:1.05rem;}
-  .val span{font-weight:300;color:#777;font-size:.9rem;}
-
-  /* Main */
-  main{display:flex;flex-direction:column;gap:2rem;}
-  .section{
     background:var(--card);
-    border-radius:28px;
-    padding:2.2rem;
-    box-shadow:0 30px 60px rgba(21,43,36,.06), 0 1px 4px rgba(21,43,36,.05);
-    border:1px solid rgba(0,0,0,.03);
+    border-radius:10px;
+    padding:1rem;
+    box-shadow:0 2px 6px rgba(0,0,0,.07);
+    border-top:3px solid var(--green);
   }
-  .section h2{
-    font-family:'Cormorant Garamond',serif;
-    font-size:1.9rem;
-    color:var(--deep);
-    margin-bottom:1.2rem;
+  .card h3{
+    font-size:.9rem;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--dark);
+    margin-bottom:.7rem;
     display:flex;
     align-items:center;
-    gap:.7rem;
+    gap:.5rem;
   }
-  .section h2 i{color:var(--gold);font-size:1.3em;}
+  .card h3 i{color:var(--accent);font-size:1.1em;}
+  .row{display:flex;align-items:center;gap:.7rem;padding:.55rem 0;border-bottom:1px dashed #ddd;}
+  .row:last-child{border-bottom:none;}
+  .icon-box{
+    width:36px;height:36px;
+    background:var(--green);color:#fff;
+    border-radius:50%;display:grid;place-items:center;
+    font-size:.85rem;flex-shrink:0;
+  }
+  .label{font-size:.7rem;color:#777;text-transform:uppercase;letter-spacing:.4px;font-weight:600;}
+  .val{font-weight:600;color:#222;font-size:.95rem;}
 
-  /* Announcement */
-  .post{
-    background:linear-gradient(135deg,#fdfcf8,#edeadd);
-    border-left:6px solid var(--gold);
-    padding:1.4rem 1.3rem;
-    border-radius:0 20px 20px 0;
-    font-family:'Cormorant Garamond',serif;
-    font-size:1.2rem;
-    line-height:1.7;
-    color:#2e2e2e;
+  /* --- MAIN --- */
+  main>section{
+    background:var(--card);
+    border-radius:10px;
+    padding:1.25rem;
+    margin-bottom:1.25rem;
+    box-shadow:0 2px 6px rgba(0,0,0,.06);
+    border:1px solid rgba(0,0,0,.04);
   }
-  .post strong{color:var(--deep);font-family:'Montserrat',sans-serif;font-weight:600;}
-  .badge{
-    display:inline-block;
-    background:var(--green);
-    color:#fff;
-    padding:.2rem .7rem;
-    border-radius:50px;
-    font-family:'Montserrat',sans-serif;
-    font-size:.72rem;font-weight:700;
-    letter-spacing:.5px;
-    margin-right:.3rem;
-    vertical-align:middle;
+  main h2{
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:1.15rem;
+    color:var(--dark);
+    margin-bottom:.9rem;
+    border-left:4px solid var(--accent);
+    padding-left:.6rem;
+    display:flex;align-items:center;gap:.5rem;
   }
+  main h2 i{color:var(--accent);font-size:1.1em;}
 
-  /* Journal table */
-  table.journal{width:100%;border-collapse:collapse;}
-  table.journal th{
+  /* Notice */
+  .notice{
+    background:#fff8e1;
+    border-left:4px solid #e0b000;
+    padding:.85rem 1rem;
+    border-radius:0 8px 8px 0;
+    font-size:.95rem;
+  }
+  .notice strong{color:#6b5b15;}
+
+  /* Journal */
+  table{width:100%;border-collapse:collapse;font-size:.92rem;}
+  th{
     text-align:left;
-    padding:.9rem .8rem;
-    border-bottom:2px solid var(--green);
-    color:var(--deep);
-    font-weight:600;
+    font-size:.72rem;
     text-transform:uppercase;
-    font-size:.78rem;
-    letter-spacing:1px;
+    letter-spacing:.06em;
+    color:#555;
+    padding:.7rem .5rem;
+    border-bottom:2px solid var(--green);
   }
-  table.journal td{
-    padding:1rem .8rem;
-    border-bottom:1px solid #eceae3;
-    vertical-align:middle;
+  td{padding:.7rem .5rem;border-bottom:1px solid #eee;vertical-align:middle;}
+  tr:hover td{background:#f8f9f6;}
+  .dot{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:24px;height:24px;border-radius:50%;
+    color:#fff;font-size:.7rem;font-weight:800;
+    margin-right:.35rem;box-shadow:0 1px 3px rgba(0,0,0,.2);
   }
-  table.journal tr:hover td{background:#f6f4ee;}
-  .dot-z{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#28a745,#20c997);color:#fff;font-weight:800;font-size:.65rem;box-shadow:0 2px 6px rgba(40,167,69,.35);margin-right:.4rem;}
-  .dot-v{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#e63946,#b00020);color:#fff;font-weight:800;font-size:.65rem;box-shadow:0 2px 6px rgba(230,57,70,.35);margin-right:.4rem;}
+  .dot-green{background:#28a745;}
+  .dot-red{background:#dc3545;}
 
-  /* Price grid */
-  .prices{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1rem;margin-top:1rem;}
+  /* Prices */
+  .price-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.6rem;}
   .price-card{
-    background:linear-gradient(145deg,#faf9f4,#ebe6d4);
-    border-radius:18px;
-    padding:1.2rem;
-    text-align:center;
-    border:1px solid rgba(197,160,89,.3);
-    transition:transform .2s ease, box-shadow .2s ease;
+    background:#f7f8f4;
+    border-left:3px solid var(--green);
+    padding:.9rem 1rem;
+    border-radius:0 8px 8px 0;
   }
-  .price-card:hover{transform:translateY(-4px);box-shadow:0 12px 25px rgba(21,43,36,.1);}
-  .price-card h4{font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:var(--deep);margin-bottom:.3rem;}
-  .price-card .num{font-size:1.7rem;font-weight:700;color:var(--gold);text-shadow:0 1px 0 rgba(0,0,0,.08);letter-spacing:-.5px;}
-  .price-card .desc{font-size:.85rem;color:#555;margin-top:.25rem;}
+  .price-card b{font-size:1.05rem;color:var(--dark);display:block;}
+  .price-card span{font-size:.85rem;color:#555;}
 
   /* Rules */
-  .rules{list-style:none;padding:0;margin-top:.5rem;}
+  .rules{list-style:none;}
   .rules li{
-    padding:.8rem 0;
+    padding:.65rem 0;
     border-bottom:1px dashed #ccc;
-    display:flex;
-    align-items:flex-start;
-    gap:.7rem;
+    display:flex;gap:.6rem;align-items:flex-start;
+    font-size:.92rem;
   }
-  .rules li i{color:var(--gold);margin-top:3px;font-size:1.1rem;}
+  .rules li i{color:var(--green);margin-top:2px;width:18px;text-align:center;}
 
-  /* Bottom contact strip */
-  .contact{
-    background:linear-gradient(135deg,var(--deep),#1d3f2f);
+  /* Contacts */
+  .contacts{
+    background:var(--dark);
     color:#fff;
-    border-radius:24px;
-    padding:1.6rem;
-    display:flex;flex-wrap:wrap;
-    gap:2rem;
-    justify-content:space-between;
-    align-items:center;
-    margin-top:1rem;
-    box-shadow:0 15px 35px rgba(21,43,36,.25);
+    border-radius:10px;
+    padding:1.2rem;
+    display:flex;flex-wrap:wrap;gap:1.5rem;justify-content:space-between;align-items:center;
   }
-  .contact a{color:var(--gold);text-decoration:none;font-weight:600;}
-  .contact .label{font-size:.75rem;opacity:.75;letter-spacing:1px;text-transform:uppercase;margin-bottom:.2rem;}
+  .contacts a{color:#e3c08d;text-decoration:none;font-weight:600;}
 
-  footer{text-align:center;padding:2rem;color:#777;font-size:.85rem;}
-
-  @media(max-width:920px){
-    .wrap{grid-template-columns:1fr;}
-    header h1{font-size:2.6rem;}
-  }
+  footer{text-align:center;padding:2rem 1rem;color:#777;font-size:.85rem;}
 </style>
 </head>
 <body>
 
 <header>
   <h1>Основной водоём</h1>
-  <div class="sub">Форель · Запуски · Ловля · Природа</div>
+  <p class="sub">Форель · Запуски · Ловля · Аналитика</p>
 </header>
 
 <div class="wrap">
-  <!-- Sidebar info -->
-  <aside class="info-col" aria-label="Информация о времени и погоде">
+  <!-- LEFT: Date / Time / Weather / Moon -->
+  <aside class="side" aria-label="Информация">
     <div class="card">
-      <h3><i class="fa-regular fa-calendar"></i> Сегодня</h3>
+      <h3><i class="fa-regular fa-calendar-check"></i> Дата / Время</h3>
       <div class="row">
-        <div class="icon"><i class="fa-regular fa-clock"></i></div>
+        <div class="icon-box"><i class="fa-regular fa-clock"></i></div>
         <div>
-          <div class="label">Дата</div>
-          <div class="val" id="dateNow">—</div>
+          <div class="label">Сейчас</div>
+          <div class="val" id="t">—</div>
         </div>
       </div>
       <div class="row">
-        <div class="icon"><i class="fa-solid fa-clock"></i></div>
+        <div class="icon-box"><i class="fa-regular fa-calendar"></i></div>
         <div>
-          <div class="label">Время</div>
-          <div class="val" id="timeNow">—</div>
+          <div class="label">Дата</div>
+          <div class="val" id="d">—</div>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <h3><i class="fa-solid fa-cloud-sun-rain"></i> Погода</h3>
+      <h3><i class="fa-solid fa-cloud-sun"></i> Погода</h3>
       <div class="row">
-        <div class="icon"><i class="fa-solid fa-temperature-half"></i></div>
+        <div class="icon-box"><i class="fa-solid fa-temperature-half"></i></div>
         <div>
           <div class="label">Температура</div>
-          <div class="val">+8 °C <span>пасмурно, дождь возможен</span></div>
+          <div class="val">+8 °C <span style="font-weight:400;color:#777;">пасмурно</span></div>
         </div>
       </div>
       <div class="row">
-        <div class="icon"><i class="fa-solid fa-droplet"></i></div>
+        <div class="icon-box"><i class="fa-solid fa-cloud-rain"></i></div>
         <div>
           <div class="label">Осадки</div>
-          <div class="val">Дождик вероятен</div>
+          <div class="val">Дождь возможен</div>
         </div>
       </div>
       <div class="row">
-        <div class="icon"><i class="fa-solid fa-wind"></i></div>
+        <div class="icon-box"><i class="fa-solid fa-wind"></i></div>
         <div>
           <div class="label">Ветер</div>
           <div class="val">СЗ, 3 м/с</div>
@@ -285,14 +217,14 @@
     <div class="card">
       <h3><i class="fa-solid fa-moon"></i> Луна</h3>
       <div class="row">
-        <div class="icon"><i class="fa-solid fa-moon"></i></div>
+        <div class="icon-box"><i class="fa-solid fa-moon"></i></div>
         <div>
           <div class="label">Фаза</div>
           <div class="val">Растущая · 78%</div>
         </div>
       </div>
       <div class="row">
-        <div class="icon"><i class="fa-regular fa-sun"></i></div>
+        <div class="icon-box"><i class="fa-solid fa-sun"></i></div>
         <div>
           <div class="label">Восход / Закат</div>
           <div class="val">05:12 / 20:38</div>
@@ -301,143 +233,128 @@
     </div>
   </aside>
 
+  <!-- MAIN -->
   <main>
     <!-- Correction -->
-    <section class="section" aria-label="Уточнение">
-      <h2><i class="fa-solid fa-bullhorn"></i> Уточнение по посту</h2>
-      <div class="post">
-        <span class="badge">Важно</span> <strong>Всем Доброе время суток!</strong> В предыдущем сообщении речь шла о <strong>«подушке»</strong> — остатке рыбы в водоёме (накоплении), а не о новом запуске.
-        <br><br>
-        Сегодня в <strong>09:13</strong> был произведён <strong>Запуск Форели на Основной водоём — 244 кг</strong>.
-      </div>
-      <div class="post" style="border-left-color:var(--green);">
-        <strong>О «подушке»:</strong> на данный момент она составляет <strong>±1270 кг</strong>, что вполне достаточно для нашей акватории и нормального лова. Ближайшие дни обещают пасмурную и дождливую погоду — самое лучшее время для ловли конопатой: и котлиться не будет, и от солнца прятаться. Надеемся, вы прорежете её в такую дождливую погодку!
-        <br><br>
-        <strong>Подход:</strong> последние год-два мы выкладываем последние цифры по подушке редко — смысла большого не видим, ведь всем и так понятно, что запуски у нас большие (относительно большинства водоёмов). Мы стараемся подбирать рыбу клевучую — чтобы она вылавливалась, а не собиралась в «перины» и «подушки». Если показатель вылова близок к запускам — это считаем нормальным результатом.
-        <br><br>
-        <strong>Главное:</strong> рыба без посторонних запахов. Кто к нам давно ездит, знает — каждый приход рыбы обязательно пробуем и только после этого разгружаем.
+    <section aria-label="Исправление">
+      <h2><i class="fa-solid fa-pen-to-square"></i> Исправление зпуска</h2>
+      <div class="notice">
+        <strong>Сегодня в 09:13 — Запуск Форели на Основной водоём: 244 кг.</strong>
+        Предыдущий пост касался остатка («подушки»), данные о запуске приведены в соответствие.
       </div>
     </section>
 
     <!-- Journal -->
-    <section class="section" aria-label="Журнал">
+    <section aria-label="Журнал">
       <h2><i class="fa-solid fa-book-open-reader"></i> Журнал запусков и выловов</h2>
-      <table class="journal" role="table" aria-label="Журнал запусков">
+      <table>
         <thead>
           <tr>
-            <th>Тип</th><th>Дата / Время</th><th>Событие</th><th>Количество</th>
+            <th>Дата / Время</th>
+            <th>Тип</th>
+            <th>Событие</th>
+            <th>Кол-во</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td><span class="dot-z">З</span> <strong>Запуск</strong></td>
-            <td>Сегодня · <strong>09:13</strong></td>
-            <td>Запуск Форели — Основной водоём</td>
+            <td><strong>Сегодня · 09:13</strong></td>
+            <td><span class="dot dot-green">З</span>Запуск</td>
+            <td>Форель — Основной водоём</td>
             <td><strong>244 кг</strong></td>
           </tr>
           <tr>
-            <td><span class="dot-z">З</span> <strong>Запуск</strong></td>
             <td>Вчера · 08:45</td>
-            <td>Запуск Форели — Основной водоём</td>
+            <td><span class="dot dot-green">З</span>Запуск</td>
+            <td>Форель — Основной водоём</td>
             <td>210 кг</td>
           </tr>
           <tr>
-            <td><span class="dot-v">В</span> <strong>Вылов</strong></td>
             <td>Вчера · 17:20</td>
+            <td><span class="dot dot-red">В</span>Вылов</td>
             <td>Итоговый вылов посетителей</td>
             <td>185 кг</td>
           </tr>
           <tr>
-            <td><span class="dot-z">З</span> <strong>Запуск</strong></td>
-            <td>Пред. день · 09:00</td>
-            <td>Запуск Форели — Основной водоём</td>
+            <td>18.04 · 09:00</td>
+            <td><span class="dot dot-green">З</span>Запуск</td>
+            <td>Форель — Основной водоём</td>
             <td>250 кг</td>
           </tr>
         </tbody>
       </table>
-      <div style="margin-top:.7rem;font-size:.85rem;color:#777;display:flex;gap:1rem;flex-wrap:wrap;">
-        <span><span class="dot-z" style="width:14px;height:14px;line-height:14px;font-size:.6rem;">З</span> <strong>Зелёный</strong> — запуск</span>
-        <span><span class="dot-v" style="width:14px;height:14px;line-height:14px;font-size:.6rem;">В</span> <strong>Красный</strong> — вылов</span>
+      <p style="font-size:.8rem;color:#777;margin-top:.5rem;">
+        <span class="dot dot-green" style="width:14px;height:14px;font-size:.6rem;">З</span> — запуск &nbsp;·&nbsp; <span class="dot dot-red" style="width:14px;height:14px;font-size:.6rem;">В</span> — вылов
+      </p>
+    </section>
+
+    <!-- Prices -->
+    <section aria-label="Цены">
+      <h2><i class="fa-solid fa-tags"></i> Цена путёвки на Основной водоём</h2>
+      <div class="price-grid">
+        <div class="price-card">
+          <b>07:00 — 18:00</b>
+          <span>4 000 ₽</span>
+        </div>
+        <div class="price-card">
+          <b>12:00 — 18:00</b>
+          <span>2 200 ₽</span>
+        </div>
+        <div class="price-card">
+          <b>18:00 — 06:00</b>
+          <span>4 000 ₽</span>
+        </div>
+        <div class="price-card">
+          <b>Сутки (24 ч)</b>
+          <span>5 000 ₽</span>
+        </div>
+      </div>
+      <div style="margin-top:.6rem;padding:.7rem;background:#f8f9f6;border-radius:6px;">
+        <strong>Приоритетный час</strong> — <b>300 ₽</b> &nbsp;|&nbsp; <strong>Доп. снасть (1 шт.)</strong> — <b>+500 ₽</b>
       </div>
     </section>
 
-    <!-- Prices & Rules -->
-    <section class="section" aria-label="Цены и правила">
-      <h2><i class="fa-solid fa-tags"></i> Условия и цены путёвки</h2>
-      <p style="font-family:'Cormorant Garamond',serif;font-size:1.2rem;color:#555;">Основной водоём</p>
-
-      <div class="prices">
-        <div class="price-card">
-          <h4>Утро / День</h4>
-          <div class="num">4 000 ₽</div>
-          <div class="desc">С 07:00 до 18:00</div>
-        </div>
-        <div class="price-card">
-          <h4>Днём</h4>
-          <div class="num">2 200 ₽</div>
-          <div class="desc">С 12:00 до 18:00</div>
-        </div>
-        <div class="price-card">
-          <h4>Ночь</h4>
-          <div class="num">4 000 ₽</div>
-          <div class="desc">С 18:00 до 06:00</div>
-        </div>
-        <div class="price-card">
-          <h4>Сутки</h4>
-          <div class="num">5 000 ₽</div>
-          <div class="desc">24 часа с момента прибытия</div>
-        </div>
-      </div>
-
-      <div style="margin-top:1.5rem;">
-        <div class="price-card" style="max-width:320px;text-align:left;display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <strong>Приоритетный час</strong>
-            <div style="font-size:.8rem;color:#777;">Дополнительно</div>
-          </div>
-          <div class="num" style="font-size:1.3rem;">300 ₽</div>
-        </div>
-      </div>
-
-      <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;color:var(--deep);margin:2rem 0 .5rem;">Правила лова</h3>
+    <!-- Rules -->
+    <section aria-label="Условия">
+      <h2><i class="fa-solid fa-clipboard-list"></i> Условия лова</h2>
       <ul class="rules">
-        <li><i class="fa-solid fa-fish-fins"></i> <div><strong>Снасти:</strong> разрешено ловить на 2 снасти (не более 2 крючков на каждой). Можно взять 1 дополнительную — <strong>+500 ₽</strong>.</div></li>
-        <li><i class="fa-solid fa-user-group"></i> <div><strong>Семья:</strong> женщина и ребёнок до 13 лет ловят <strong>бесплатно</strong> на снасти рыбака, оплатившего путёвку.</div></li>
-        <li><i class="fa-solid fa-person-fishing"></i> <div><strong>Запуск:</strong> при запуске Форели на основном водоёме ловит <strong>1 человек из семьи</strong>. Остальные ловят <strong>вне зоны запуска</strong>.</div></li>
-        <li><i class="fa-solid fa-ban"></i> <div><strong>Норма:</strong> <strong>без нормы вылова</strong>.</div></li>
-        <li><i class="fa-solid fa-ban"></i> <div><strong>Запрещено:</strong> пеллетс и блёсна с тройниками.</div></li>
-        <li><i class="fa-solid fa-check"></i> <div><strong>Спиннинг:</strong> разрешён.</div></li>
+        <li><i class="fa-solid fa-fish-fins"></i> <div>Разрешено ловить на <strong>2 снасти</strong> (не более <strong>2 крючков</strong> на каждой снасти). Можно взять 1 доп. снасть — <strong>+500 ₽</strong>.</div></li>
+        <li><i class="fa-solid fa-user-group"></i> <div><strong>Женщина и ребёнок до 13 лет</strong> ловят <strong>бесплатно</strong> на снасти рыбака, оплатившего путёвку.</div></li>
+        <li><i class="fa-solid fa-user-tie"></i> <div>На запуске Форели ловит <strong>1 человек из семьи</strong>. Остальные ловят <strong>вне зоны запуска</strong>.</div></li>
+        <li><i class="fa-solid fa-ban"></i> <div><strong>Без нормы вылова</strong>.</div></li>
+        <li><i class="fa-solid fa-ban"></i> <div><strong>Запрещены:</strong> пеллетс и блёсна с тройниками.</div></li>
+        <li><i class="fa-solid fa-check"></i> <div><strong>Спиннинг разрешён.</strong></div></li>
       </ul>
     </section>
 
     <!-- Contacts -->
-    <section class="contact" aria-label="Контакты">
-      <div>
-        <div class="label">Координаты</div>
-        <a href="https://maps.google.com/?q=55.840619,37.322979" target="_blank" style="font-size:1.1rem;letter-spacing:.5px;">55.840619, 37.322979</a>
-      </div>
-      <div>
-        <div class="label">Администрация</div>
-        <a href="tel:+79852620637" style="font-size:1.3rem;letter-spacing:.5px;">8 (985) 262-06-37</a>
+    <section aria-label="Контакты">
+      <div class="contacts">
+        <div>
+          <div style="font-size:.75rem;opacity:.7;letter-spacing:.5px;">Координаты</div>
+          <a href="https://maps.google.com/?q=55.840619,37.322979" target="_blank">55.840619, 37.322979</a>
+        </div>
+        <div>
+          <div style="font-size:.75rem;opacity:.7;letter-spacing:.5px;">Администрация</div>
+          <a href="tel:+79852620637">8 (985) 262-06-37</a>
+        </div>
       </div>
     </section>
   </main>
 </div>
 
 <footer>
-  © 2024 Основной водоём · Форель · Обновлено сегодня · С уважением администрации
+  © Основной водоём · Форель · Данные обновлены · С уважением администрации
 </footer>
 
 <script>
-  function tick(){
-    const d=new Date();
-    document.getElementById('dateNow').textContent = d.toLocaleDateString('ru-RU',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-    document.getElementById('timeNow').textContent = d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  function update(){
+    const n=new Date();
+    document.getElementById('t').textContent=n.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('d').textContent=n.toLocaleDateString('ru-RU',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   }
-  tick();
-
-  // Auto update every second
-  setInterval(tick, 1000);
+  update();
+  setInterval(update,1000);
 </script>
 
 </body>
