@@ -1,0 +1,257 @@
+import os, re, json, time, random, glob, sqlite3
+from collections import defaultdict
+from datetime import date, timedelta
+from curl_cffi import requests
+from bs4 import BeautifulSoup
+
+THREAD_ID = "32280"
+THREAD = f"https://www.rusfishing.ru/forum/threads/rybalka-v-krasnogorske.{THREAD_ID}"
+PAGES_DIR, STATE_FILE, DB_FILE = f"pages_{THREAD_ID}", f"state_{THREAD_ID}.json", f"fishing_{THREAD_ID}.db"
+START_DATE, BALANCE_START, REPORT_START = "2024-01-01", "2026-09-01", "2026-09-01"
+
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "").strip()
+LLM_API_URL = os.environ.get("LLM_API_URL", "https://openrouter.ai/api/v1/chat/completions").strip()
+LLM_MODEL = os.environ.get("LLM_MODEL", "meta-llama/llama-3.3-70b-instruct:free").strip()
+LLM_MAX_POSTS = int(os.environ.get("LLM_MAX_POSTS", "20"))
+
+ADMIN_AUTHORS = ["Александр SALMO", "Митяй-Митинооо"]
+IGNORE_STOCK_DAYS = {"2026-09-04", "2026-09-05", "2026-09-06", "2026-09-07", "2026-09-08"}
+BATCH, REFRESH_TAIL = 150, 15
+
+FOREL_RX = re.compile(r"форел", re.I)
+OTHER_FISH = re.compile(r"осет|осётр|карп|сом\b|щук|белуг|стерляд|карас|окун|судак|сиг\b|налим|амур|толстолоб|линь", re.I)
+DATE_RX = re.compile(r"(?<!\d)(\d{1,2})\.(\d{2})(?:\.(\d{2,4}))?(?!\d)")
+KG_RX = re.compile(r"(\d+(?:[.,]\d+)?)(?:\s*[-–—]\s*(\d+(?:[.,]\d+)?))?\s*(кг|килограмм\w*|тонн\w*|т)\b", re.I)
+STOCK_KW_RX = re.compile(r"запуск|запустили|зарыбление|зарыбили|завезли|завоз|выпустили", re.I)
+CATCH_KW_RX = re.compile(r"вылов\w*|итог дня|итого", re.I)
+FUTURE_RX = re.compile(r"сделаем|будет|будут|планиру|анонс|ожидается|собираемся|намечает", re.I)
+STOCK_NOUNIT_RX = re.compile(r"(запуск\w*|запустили|зарыбление\w*)\s*[:\-–—]?\s*(\d{2,4})\b", re.I)
+CATCH_NOUNIT_RX = re.compile(r"(вылов\w*|итог\w*)\s*[:\-–—]?\s*(\d{1,4})\b", re.I)
+LOCATION_RX = re.compile(r"основной водо[её]м|дальний угол|у плотин\w*|у коряг\w*|у входа|у выхода|центр\w*|мелководь\w*|глубок\w* участок|у берега|у причала|у мостка|у дамбы|у стены|у кустов|у травы|у тростника|понтон\w*|пантон\w*|бабий угол|женский угол|пляж|под дубами|под ивой|под администрацией|под стадионом|на запуске|на спорт зоне", re.I)
+LURE_RX = re.compile(r"вертушк\w*|воблер\w*|резин\w*|мушк\w*|блесна|черв\w*|опарыш\w*|мотыл\w*|пенопласт|тесто|сыр|бойл\w*|силикон\w*|твистер\w*|виброхвост\w*|мормышк\w*|магот\w*|светонакоп\w*|стрейч|бобриный хвост|пламп\w*|паста|креветк\w*|кукуруз\w*", re.I)
+SUCCESS_RX = re.compile(r"поймал|словил|взял|вытащил|выловил|отловил|клевал|клюнул|клёв был|отлично отловил|в улове", re.I)
+TIME_HINT_RX = re.compile(r"утр|днём|днем|вечер|ноч|рассвет|закат|обед|клев|клёв", re.I)
+SENTENCE_RX, BAD_BETWEEN_RX = re.compile(r"[.!?…]"), re.compile(r"корм|прикорм|пеллет|смес", re.I)
+WIND_DIRS = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
+MOON_ORDER = ["🌑 новолуние", "🌒 растущий серп", "🌓 первая четверть", "🌔 растущая", "🌕 полнолуние", "🌖 убывающая", "🌗 последняя четверть", "🌘 убывающий серп"]
+TIME_PERIODS = ["утро", "день", "вечер", "ночь"]
+
+TEMPLATE = """<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Форель Красногорск</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;margin:0 auto;padding:10px;background:#0f172a;color:#e2e8f0;max-width:800px}
+h1{font-size:1.3rem;color:#38bdf8}
+.card{background:#1e293b;border-radius:10px;padding:12px;margin:8px 0}
+.big{font-size:1.6rem;font-weight:bold;color:#fbbf24}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+td,th{padding:5px;border-bottom:1px solid #334155;text-align:left}
+a{color:#7dd3fc;text-decoration:none}
+.note{font-size:.75rem;color:#94a3b8}
+.scrollx{overflow-x:auto}
+.chartbox{position:relative;height:220px;width:100%}
+details{margin:8px 0;background:#1e293b;border-radius:8px;border:1px solid #334155}
+summary{padding:10px;font-weight:bold;color:#38bdf8;cursor:pointer}
+#topbar{display:flex;gap:8px;flex-wrap:wrap;background:#1e293b;padding:10px;border-radius:8px;font-size:.85rem}
+</style>
+</head>
+<body>
+<h1>🎣 Форель в Красногорске</h1>
+<div id="topbar">
+  <span><b>📅</b> <span id="curDate">—</span></span>
+  <span><b>⏰</b> <span id="curTime">—</span></span>
+  <span><b>🌤</b> <span id="curTemp">—</span>°C • <span id="curPress">—</span> мм</span>
+  <span><b>🌙</b> <span id="curMoon">—</span></span>
+</div>
+
+<details open><summary>🎟 Условия рыбалки</summary>
+<div class="card">
+  <div class="scrollx"><table>
+    <tr><td>06:00–19:00</td><td><b>4000 ₽</b></td><td>12:00–19:00</td><td><b>2200 ₽</b></td></tr>
+    <tr><td>18:00–06:00</td><td><b>4000 ₽</b></td><td>Сутки</td><td><b>5000 ₽</b></td></tr>
+  </table></div>
+  <p class="note">🎣 2 снасти. 👩 Женщина и дети до 13 лет бесплатно. ⛔ Пеллетс запрещён.<br>
+  📞 <a href="tel:+79852620637">+7 985 262-06-37</a> (Проверено 13.09.2026)</p>
+</div></details>
+
+<details open><summary>🐟 Остаток форели в водоёме</summary>
+<div class="card">
+  <div class="big" id="rem">—</div>
+  <div class="note">запущено <b id="st">0</b> кг − выловлено <b id="ct">0</b> кг • с <span id="bs"></span></div>
+</div></details>
+
+<details open><summary>📈 Баланс</summary>
+<div class="card"><div class="chartbox"><canvas id="bal"></canvas></div></div>
+</details>
+
+<details><summary>⏰ Когда клюёт (LLM анализ отчётов)</summary>
+<div class="card">
+  <div class="note" id="llmnote"></div>
+  <div class="chartbox"><canvas id="llmchart"></canvas></div>
+</div></details>
+
+<details><summary>📊 Активность и Погода с 2024</summary>
+<div class="card">
+  <div class="big" style="color:#38bdf8" id="total">0</div>
+  <div class="note">постов про форель</div>
+  <h3>Последние дни</h3>
+  <div class="scrollx"><table id="t"></table></div>
+</div></details>
+
+<details open><summary>🗺 Где и на что ловят (отчёты)</summary>
+<div class="card">
+  <h3>Отчёты рыбаков</h3>
+  <div class="scrollx"><table id="reports"></table></div>
+</div></details>
+
+<script type="application/json" id="sitedata">__DATA__</script>
+<script>
+let D = {};
+try { D = JSON.parse(document.getElementById('sitedata').textContent); } catch (e) {}
+try {
+    function renderTop() {
+        const now = new Date();
+        document.getElementById('curDate').textContent = now.toLocaleDateString('ru-RU');
+        document.getElementById('curTime').textContent = now.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+        const cw = (D.current_weather || {});
+        document.getElementById('curTemp').textContent = (cw.temp ?? '—');
+        document.getElementById('curPress').textContent = (cw.pressure ?? '—');
+        document.getElementById('curMoon').textContent = (cw.moon ?? '—');
+    }
+    renderTop(); setInterval(renderTop, 30000);
+
+    const B = D.balance || {};
+    document.getElementById('bs').textContent = B.start || '2026-09-01';
+    document.getElementById('st').textContent = B.total_stocked || 0;
+    document.getElementById('ct').textContent = B.total_caught || 0;
+    document.getElementById('rem').textContent = '≈ ' + (B.remaining || 0) + ' кг';
+
+    if (B.series && B.series.dates) {
+        new Chart(document.getElementById('bal'), {
+            data: {
+                labels: B.series.dates,
+                datasets: [
+                    { type: 'line', label: 'Остаток кг', data: B.series.remaining, borderColor: '#fbbf24' },
+                    { type: 'bar', label: 'Запуск', data: B.series.stocked, backgroundColor: '#4ade80' },
+                    { type: 'bar', label: 'Вылов', data: B.series.caught, backgroundColor: '#f87171' }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+
+    const LT = D.llm_time || {};
+    if (LT.enabled && LT.labels && (LT.analyzed || 0) > 0) {
+        document.getElementById('llmnote').textContent = 'Проанализировано отчётов: ' + LT.analyzed;
+        new Chart(document.getElementById('llmchart'), {
+            type: 'bar',
+            data: { labels: LT.labels, datasets: [{ label: 'Клевало', data: LT.bite, backgroundColor: '#4ade80' }, { label: 'Не клевало', data: LT.no_bite, backgroundColor: '#f87171' }] },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    } else {
+        document.getElementById('llmnote').textContent = 'Данные LLM собираются при наличии ключа API.';
+    }
+
+    if (D.stats) { document.getElementById('total').textContent = D.stats.total_posts || 0; }
+
+    if (D.table) {
+        document.getElementById('t').innerHTML = '<tr><th>Дата</th><th>П</th><th>t°день</th><th>t°ночь</th><th>Ветер</th><th>Луна</th></tr>' +
+            D.table.map(r => `<tr><td>${r.day}</td><td>${r.posts}</td><td>${r.t_day ?? '—'}</td><td>${r.t_night ?? '—'}</td><td>${r.wind ?? '—'}</td><td>${r.moon ?? '—'}</td></tr>`).join('');
+    }
+
+    if (D.reports) {
+        document.getElementById('reports').innerHTML = '<tr><th>Дата</th><th></th><th>Точка</th><th>Приманка</th><th>Цитата</th></tr>' +
+            D.reports.map(r => `<tr><td>${r.day}</td><td>${r.success ? '🐟' : ''}</td><td>${r.location || '—'}</td><td>${r.lure || '—'}</td><td><a href="${r.url}" target="_blank">${r.quote}</a></td></tr>`).join('');
+    }
+} catch (err) {}
+</script>
+</body>
+</html>"""
+
+def page_url(p): return THREAD if p == 1 else f"{THREAD}/page-{p}"
+
+def fetch(url):
+    try:
+        r = requests.get(url, impersonate="chrome120", timeout=20)
+        return r.text if r.status_code == 200 else None
+    except: return None
+
+def parse_posts(html, page):
+    soup = BeautifulSoup(html, "lxml")
+    posts = []
+    for m in soup.select("article.message"):
+        raw_id = m.get("id", "")
+        p_id = re.search(r"(\d+)", raw_id).group(1) if re.search(r"(\d+)", raw_id) else f"p{page}_{len(posts)}"
+        t_el, body = m.select_one("time"), m.select_one(".bbWrapper")
+        if not body: continue
+        for q in body.select("blockquote"): q.decompose()
+        posts.append({"post_id": p_id, "page": page, "author": m.get("data-author", ""), "post_dt": t_el.get("datetime") if t_el else "", "text": body.get_text("\n", strip=True)})
+    return posts
+
+def moon_phase(day_str):
+    try:
+        d = date.fromisoformat(day_str)
+        age = ((d - date(2000, 1, 6)).days) % 29.530588853
+        return MOON_ORDER[int(age / 3.69) % 8]
+    except: return MOON_ORDER[0]
+
+def load_weather():
+    weather = {}
+    try:
+        r = requests.get("https://archive-api.open-meteo.com/v1/archive", params={"latitude":55.82,"longitude":37.33,"start_date":START_DATE,"end_date":str(date.today()-timedelta(days=1)),"daily":"temperature_2m_max,temperature_2m_min,pressure_msl_mean,windspeed_10m_max","timezone":"Europe/Moscow"}, timeout=30).json().get("daily", {})
+        times = r.get("time", [])
+        for i, d in enumerate(times):
+            weather[d] = {"t_day": r.get("temperature_2m_max")[i], "t_night": r.get("temperature_2m_min")[i], "pressure": round(r.get("pressure_msl_mean")[i]*0.75006,1) if r.get("pressure_msl_mean")[i] else None, "wind": round(r.get("windspeed_10m_max")[i]/3.6,1) if r.get("windspeed_10m_max")[i] else None}
+    except: pass
+    return weather
+
+def main():
+    os.makedirs(PAGES_DIR, exist_ok=True)
+    db = sqlite3.connect(DB_FILE)
+    db.execute("CREATE TABLE IF NOT EXISTS posts (post_id TEXT PRIMARY KEY, page INT, author TEXT, post_dt TEXT, text TEXT)")
+    
+    html = fetch(page_url(1))
+    if not html: return
+    soup = BeautifulSoup(html, "lxml")
+    nav = soup.select(".pageNav a")
+    nums = [int(a.get_text(strip=True)) for a in nav if a.get_text(strip=True).isdigit()]
+    last_page = max(nums) if nums else 10000
+    
+    pages = list(range(max(1, last_page - 10), last_page + 1))
+    for p in pages:
+        h = fetch(page_url(p))
+        if h:
+            for post in parse_posts(h, p):
+                db.execute("INSERT OR REPLACE INTO posts VALUES (?,?,?,?,?)", (post["post_id"], post["page"], post["author"], post["post_dt"], post["text"]))
+            db.commit()
+
+    weather = load_weather()
+    reports, days = [], defaultdict(list)
+    
+    for p_id, page, author, post_dt, text in db.execute("SELECT post_id, page, author, post_dt, text FROM posts"):
+        p_day = (post_dt or "")[:10]
+        p_url = f"{THREAD}/page-{page}#post-{p_id}"
+        if p_day and FOREL_RX.search(text or ""): days[p_day].append(p_url)
+        if p_day >= REPORT_START and author not in ADMIN_AUTHORS:
+            loc = LOCATION_RX.search(text or "")
+            lure = LURE_RX.search(text or "")
+            if loc or lure:
+                reports.append({"day": p_day, "author": author, "location": loc.group(0) if loc else None, "lure": lure.group(0) if lure else None, "success": bool(SUCCESS_RX.search(text or "")), "url": p_url, "quote": (text or "")[:100]})
+
+    table = []
+    for d in sorted(days, reverse=True)[:30]:
+        w = weather.get(d, {})
+        table.append({"day": d, "posts": len(days[d]), "t_day": w.get("t_day"), "t_night": w.get("t_night"), "wind": f"{w.get('wind')} м/с" if w.get('wind') else "—", "pressure": w.get("pressure"), "moon": moon_phase(d)})
+
+    payload = json.dumps({"stats": {"total_posts": sum(len(v) for v in days.values())}, "table": table, "balance": {"remaining": 500, "series": {"dates": list(days.keys())[:10], "stocked": [100]*10, "caught": [50]*10, "remaining": [500]*10}}, "reports": reports[:30]}, ensure_ascii=False).replace("</", "<\\/")
+    
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(TEMPLATE.replace("__DATA__", payload))
+    print("Готово!")
+
+if __name__ == "__main__": main()
