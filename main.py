@@ -59,146 +59,273 @@ WIND_DIRS = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
 MOON_ORDER = ["новолуние", "растущий серп", "первая четверть", "растущая", "полнолуние", "убывающая", "последняя четверть", "убывающий серп"]
 TIME_PERIODS = ["утро", "день", "вечер", "ночь"]
 
+
+# === Группировка точек и приманок ===
+def norm_loc(s):
+    s = (s or "").lower().strip()
+    if "понтон" in s or "пантон" in s:
+        return "понтон"
+    if "стадион" in s:
+        return "под стадионом"
+    if "дуб" in s:
+        return "под дубами"
+    if "запуск" in s:
+        return "на запуске"
+    if "спорт" in s:
+        return "спорт зона"
+    if "угол" in s:
+        return "дальний угол"
+    if "администрац" in s or "берёз" in s:
+        return "под берёзами"
+    return s
+
+def norm_lure(s):
+    s = (s or "").lower().strip()
+    if "резин" in s:
+        return "резина"
+    if "светонакоп" in s and "стрейч" in s:
+        return "стрейч (светонакопительный)"
+    if "светонакоп" in s:
+        return "светонакопительный"
+    if "стрейч" in s:
+        return "стрейч"
+    if "магот" in s:
+        return "магот"
+    if "паста" in s or "сыр" in s:
+        return "паста (сыр)"
+    if "кукуруз" in s:
+        return "кукуруза"
+    if "черв" in s:
+        return "червь"
+    if "пламп" in s:
+        return "пламп"
+    if "опарыш" in s:
+        return "опарыш"
+    return s
+
+
+# === HTML-шаблон (НОВЫЙ ДИЗАЙН) ===
 TEMPLATE = """<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1221">
 <title>Форель Красногорск</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐟</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 *{box-sizing:border-box}
-body{font-family:system-ui,-apple-system,sans-serif;margin:0 auto;padding:10px;background:#0f172a;color:#e2e8f0;max-width:860px}
-h1{font-size:1.3rem;color:#38bdf8}
-h3{font-size:.95rem;margin:10px 0 6px}
-.card{background:#1e293b;padding:12px;margin:0}
-.big{font-size:1.6rem;font-weight:800;color:#fbbf24}
-table{width:100%;border-collapse:collapse;font-size:.75rem;min-width:480px}
-td,th{padding:5px 4px;border-bottom:1px solid #334155;text-align:left;vertical-align:top}
+html{background:#0b1221}
+body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;margin:0 auto;padding:18px 12px 40px;color:#e2e8f0;max-width:860px;
+  background:
+    radial-gradient(700px 340px at 88% -60px, rgba(56,189,248,.14), transparent 70%),
+    radial-gradient(560px 300px at -70px 220px, rgba(167,139,250,.10), transparent 70%),
+    radial-gradient(600px 320px at 110% 65%, rgba(251,191,36,.06), transparent 70%);
+  background-attachment:fixed}
 a{color:#7dd3fc;text-decoration:none}
-.note{font-size:.75rem;color:#94a3b8}
-.scrollx{overflow-x:auto}
-.narrow{min-width:0}
-.chartbox{position:relative;height:230px;width:100%}
-details{margin:8px 0;border:1px solid #334155;border-radius:10px;overflow:hidden;background:#1e293b}
-summary{padding:11px 12px;font-weight:800;color:#38bdf8;cursor:pointer;list-style:none}
+a:hover{text-decoration:underline}
+.note{font-size:.75rem;color:#94a3b8;line-height:1.55}
+.card{padding:14px}
+.big{font-size:2.1rem;font-weight:900;color:#fbbf24;text-shadow:0 0 24px rgba(251,191,36,.35);letter-spacing:.5px;margin:2px 0 8px}
+.hero{margin:4px 2px 16px}
+.ttl{display:flex;align-items:center;gap:12px}
+.fish{display:inline-block;font-size:1.9rem;animation:bob 3.2s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0) rotate(-5deg)}50%{transform:translateY(-5px) rotate(6deg)}}
+h1{margin:0;font-size:1.75rem;font-weight:900;letter-spacing:.3px;
+  background:linear-gradient(92deg,#7dd3fc 0%,#38bdf8 35%,#a78bfa 70%,#fbbf24 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:#7dd3fc}
+.hero p{margin:7px 0 0;color:#94a3b8;font-size:.83rem;letter-spacing:.4px}
+details{margin:12px 0;border:1px solid rgba(148,163,184,.16);border-radius:16px;overflow:hidden;
+  background:linear-gradient(180deg,rgba(30,41,59,.92),rgba(21,31,52,.92));box-shadow:0 10px 30px rgba(2,6,23,.45);transition:border-color .2s}
+details[open]{border-color:rgba(56,189,248,.30)}
+summary{position:relative;padding:13px 42px 13px 15px;font-weight:800;color:#7dd3fc;cursor:pointer;list-style:none;user-select:none;
+  background:linear-gradient(90deg,rgba(56,189,248,.09),transparent 65%)}
+summary:hover{color:#bae6fd}
 summary::-webkit-details-marker{display:none}
-#topbar{display:flex;gap:10px;flex-wrap:wrap;background:#1e293b;padding:11px;border-radius:10px;font-size:.82rem;margin:8px 0}
-#topbar b{color:#fbbf24}
+summary::after{content:'▾';position:absolute;right:15px;top:50%;transform:translateY(-50%);color:#64748b;transition:transform .25s}
+details[open] summary::after{transform:translateY(-50%) rotate(180deg);color:#38bdf8}
+#topbar{display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(30,41,59,.95),rgba(21,31,52,.95));
+  border:1px solid rgba(148,163,184,.16);border-radius:16px;padding:4px 15px;margin:0 0 14px;box-shadow:0 10px 30px rgba(2,6,23,.45)}
+.trow{display:flex;align-items:center;gap:12px;padding:10px 0}
+.trow + .trow{border-top:1px dashed rgba(148,163,184,.15)}
+.ticon{width:38px;height:38px;flex:none;display:flex;align-items:center;justify-content:center;font-size:1.1rem;
+  border-radius:12px;background:rgba(56,189,248,.10);border:1px solid rgba(56,189,248,.22)}
+.tlabel{color:#94a3b8;font-size:.74rem;text-transform:uppercase;letter-spacing:.8px;width:88px;flex:none}
+.trow b{font-size:.95rem;color:#f1f5f9;font-weight:700}
+.badge{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;
+  font-weight:900;font-size:.7rem;color:#fff;vertical-align:middle}
+.badge.z{background:linear-gradient(135deg,#34d399,#16a34a);box-shadow:0 0 10px rgba(52,211,153,.45)}
+.badge.v{background:linear-gradient(135deg,#fb7185,#dc2626);box-shadow:0 0 10px rgba(248,113,113,.45)}
+.badge-success{display:inline-block;background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.35);
+  padding:2px 7px;border-radius:5px;font-weight:800;font-size:.66rem;letter-spacing:.4px;white-space:nowrap}
+.price{display:inline-block;background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.30);color:#fbbf24;
+  font-weight:800;padding:4px 12px;border-radius:999px;font-size:.82rem;white-space:nowrap}
+.pricelist td{padding:9px 6px}
+.pr{text-align:right;white-space:nowrap}
+.rules{list-style:none;margin:12px 0 2px;padding:0;display:grid;gap:7px;font-size:.84rem}
+.rules li{background:rgba(148,163,184,.06);border:1px solid rgba(148,163,184,.12);border-radius:11px;padding:9px 12px;line-height:1.45}
+.rules b{color:#fbbf24}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:13px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 15px;border-radius:12px;font-weight:800;font-size:.85rem;
+  text-decoration:none;transition:transform .15s}
+.btn:hover{transform:translateY(-1px);text-decoration:none}
+.btn-call{background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#04263f;box-shadow:0 6px 16px rgba(56,189,248,.30)}
+.btn-map{background:rgba(56,189,248,.10);border:1px solid rgba(56,189,248,.35);color:#7dd3fc}
+table{width:100%;border-collapse:collapse;font-size:.75rem;min-width:480px;background:rgba(15,23,42,.35)}
+td,th{padding:7px 6px;border-bottom:1px solid rgba(51,65,85,.7);text-align:left;vertical-align:middle}
+th{background:rgba(30,41,59,.85);color:#93c5fd;font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:rgba(56,189,248,.05)}
+.scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid rgba(148,163,184,.14);border-radius:10px;margin:4px 0}
+.scrollx::-webkit-scrollbar{height:8px}
+.scrollx::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
+.narrow{min-width:0}
+.chartbox{position:relative;height:240px;width:100%}
+footer{margin-top:20px;text-align:center}
 </style>
 </head>
 <body>
-<h1>Форель в Красногорске</h1>
+
+<header class="hero">
+  <div class="ttl"><span class="fish">🐟</span><h1>Форель в Красногорске</h1></div>
+  <p>погода • запуски • баланс водоёма • отчёты рыбаков</p>
+</header>
 
 <div id="topbar">
-<span><b>Дата:</b> <span id="curDate">-</span></span>
-<span><b>Время:</b> <span id="curTime">-</span></span>
-<span><b>Погода:</b> <span id="curTemp">-</span>C, <span id="curPress">-</span> мм</span>
-<span><b>Луна:</b> <span id="curMoon">-</span></span>
+  <div class="trow"><span class="ticon">📅</span><span class="tlabel">Дата</span><b id="curDate">-</b></div>
+  <div class="trow"><span class="ticon">⏰</span><span class="tlabel">Время</span><b id="curTime">-</b></div>
+  <div class="trow"><span class="ticon">🌡️</span><span class="tlabel">Погода</span><b><span id="curTemp">-</span> °C</b></div>
+  <div class="trow"><span class="ticon">📊</span><span class="tlabel">Давление</span><b><span id="curPress">-</span> мм рт. ст.</b></div>
+  <div class="trow"><span class="ticon">🌙</span><span class="tlabel">Луна</span><b id="curMoon">-</b></div>
 </div>
 
-<details open><summary>Условия рыбалки</summary><div class="card">
-<div class="scrollx"><table class="narrow">
-<tr><td>06:00-19:00</td><td><b>4000 Р</b></td></tr>
-<tr><td>12:00-19:00</td><td><b>2200 Р</b></td></tr>
-<tr><td>18:00-06:00</td><td><b>4000 Р</b></td></tr>
-<tr><td>Сутки</td><td><b>5000 Р</b></td></tr>
-<tr><td>Приоритетный час</td><td><b>300 Р</b></td></tr>
-<tr><td>Доп. снасть</td><td><b>500 Р</b></td></tr>
+<details open><summary>🎫 Условия рыбалки и цены</summary><div class="card">
+<div class="scrollx"><table class="narrow pricelist">
+<tr><td>🌅 07:00 – 18:00</td><td class="pr"><span class="price">4 000 ₽</span></td></tr>
+<tr><td>🌇 12:00 – 18:00</td><td class="pr"><span class="price">2 200 ₽</span></td></tr>
+<tr><td>🌙 18:00 – 06:00</td><td class="pr"><span class="price">4 000 ₽</span></td></tr>
+<tr><td>⏳ Сутки — 24 часа с момента прибытия</td><td class="pr"><span class="price">5 000 ₽</span></td></tr>
+<tr><td>⭐ Приоритетный час</td><td class="pr"><span class="price">300 ₽</span></td></tr>
+<tr><td>➕ Дополнительная снасть (1 шт.)</td><td class="pr"><span class="price">500 ₽</span></td></tr>
 </table></div>
-<p class="note">Две снасти, до двух крючков. Женщина и ребёнок до 13 лет бесплатно. Нормы вылова нет. Спиннинг разрешён. Пеллетс и тройники запрещены.<br>
-Телефон: <a href="tel:+79852620637">+7 985 262-06-37</a><br>
-<a href="https://yandex.ru/maps/?pt=37.322979,55.840619&z=15&l=map" target="_blank">55.840619, 37.322979</a><br>
-Блок обновляется вручную. Актуально на 13.09.2026.</p>
+<ul class="rules">
+<li>🎣 Разрешено <b>2 снасти</b>, на каждой не более 2 крючков</li>
+<li>✅ Спиннинг разрешён</li>
+<li>♾️ Нормы вылова нет</li>
+<li>👩‍👧 Женщина и ребёнок до 13 лет ловят <b>бесплатно</b> — на снасти рыбака, оплатившего путёвку</li>
+<li>👨‍👩‍👧 На запуске форели ловит <b>1 человек из семьи</b>, остальные — вне зоны запуска</li>
+<li>🚫 Пеллетс и блёсна с тройниками запрещены</li>
+</ul>
+<div class="btnrow">
+<a class="btn btn-call" href="tel:+79852620637">📞 +7 985 262-06-37</a>
+<a class="btn btn-map" href="https://yandex.ru/maps/?pt=37.322979,55.840619&z=15&l=map" target="_blank">📍 55.840619, 37.322979</a>
+</div>
+<p class="note" style="margin-top:11px">Цены и правила обновляются вручную. Актуально на 22.09.2026.</p>
 </div></details>
 
-<details open><summary>Остаток форели в водоёме</summary><div class="card">
+<details open><summary>🐟 Остаток форели в водоёме</summary><div class="card">
 <div class="big" id="rem">-</div>
-<div class="note">запущено <b id="st">0</b> кг, выловлено <b id="ct">0</b> кг, отсчёт с <span id="bs"></span><br>
-последний запуск: <span id="dsl">-</span>, обновлено <span id="upd"></span></div>
+<div class="note">запущено <b id="st" style="color:#4ade80">0</b> кг • выловлено <b id="ct" style="color:#f87171">0</b> кг • отсчёт с <span id="bs"></span><br>
+последний запуск: <span id="dsl">-</span> • обновлено <span id="upd"></span></div>
 </div></details>
 
-<details open><summary>Баланс</summary><div class="card" id="balbox">
+<details open><summary>📊 Баланс</summary><div class="card" id="balbox">
 <div class="chartbox"><canvas id="bal"></canvas></div>
 </div></details>
 
-<details><summary>Журнал запусков и выловов</summary><div class="card">
+<details><summary>📓 Журнал запусков и выловов</summary><div class="card">
 <div class="scrollx"><table id="ev"></table></div>
+<div class="note" style="margin-top:10px"><span class="badge z">З</span> — запуск форели &nbsp;•&nbsp; <span class="badge v">В</span> — вылов за день</div>
 </div></details>
 
-<details><summary>Когда клюёт (анализ LLM)</summary><div class="card">
+<details><summary>🕒 Когда клюёт (анализ LLM)</summary><div class="card">
 <div class="note" id="llmnote"></div>
 <div class="chartbox"><canvas id="llmchart"></canvas></div>
 <div class="note">Отчёты прочитаны языковой моделью: «утром тишина, вечером раздача» учитывается верно.</div>
 </div></details>
 
-<details><summary>Луна и клёв</summary><div class="card">
+<details><summary>🌙 Луна и клёв</summary><div class="card">
 <div class="chartbox"><canvas id="moonchart"></canvas></div>
 <div class="note">Средняя активность отчётов в каждой фазе луны с 2024 года.</div>
 </div></details>
 
-<details><summary>Активность обсуждений с 2024</summary><div class="card">
+<details><summary>📈 Активность обсуждений с 2024</summary><div class="card">
 <div class="note" id="prog"></div>
-<div class="big" style="color:#38bdf8" id="total">0</div>
+<div class="big" style="color:#38bdf8;text-shadow:0 0 24px rgba(56,189,248,.35)" id="total">0</div>
 <div class="note">постов про форель за <span id="days">0</span> дней</div>
-<h3>По месяцам</h3>
+<h3 style="font-size:.9rem;color:#7dd3fc">По месяцам</h3>
 <div class="chartbox"><canvas id="m"></canvas></div>
-<h3>Клёв и давление</h3>
+<h3 style="font-size:.9rem;color:#7dd3fc">Клёв и давление</h3>
 <div class="chartbox"><canvas id="p"></canvas></div>
-<h3>Последние активные дни</h3>
+<h3 style="font-size:.9rem;color:#7dd3fc">Последние активные дни</h3>
 <div class="scrollx"><table id="t"></table></div>
-<div class="note">t день - максимум, t ночь - минимум за сутки.</div>
+<div class="note">t день — максимум, t ночь — минимум за сутки.</div>
 </div></details>
 
-<details open><summary>Где и на что ловят</summary><div class="card">
-<h3>Топ точек</h3>
-<div class="scrollx"><table id="toploc" class="narrow"></table></div>
-<h3>Топ приманок</h3>
+<details open><summary>🎯 Где и на что ловят (точки и приманки)</summary><div class="card">
+<h3 style="font-size:.9rem;color:#93c5fd;margin:2px 0 6px">📍 Популярные локации</h3>
+<div class="scrollx"><table id="toploc" style="min-width:100%"></table></div>
+<h3 style="font-size:.9rem;color:#93c5fd;margin:14px 0 6px">🎣 Топ рабочих приманок</h3>
 <div class="chartbox"><canvas id="lure"></canvas></div>
-<h3>Отчёты рыбаков</h3>
+<h3 style="font-size:.9rem;color:#93c5fd;margin:14px 0 6px">💬 Последние отчёты с водоёма</h3>
 <div class="scrollx"><table id="reports"></table></div>
-<div class="note">Точки и приманки найдены по ключевым словам, открывайте ссылку и читайте пост целиком.</div>
+<div class="note">Кликните по тексту отчёта, чтобы открыть оригинальное сообщение на форуме Rusfishing.</div>
 </div></details>
+
+<footer><p class="note">🐟 Данные собираются с форума rusfishing.ru</p></footer>
 
 <script type="application/json" id="sitedata">__DATA__</script>
 <script>
 var D = {};
 try { D = JSON.parse(document.getElementById('sitedata').textContent); } catch (e) { console.error(e); }
 try {
-var CH = { responsive: true, maintainAspectRatio: false };
+if (window.Chart) {
+  Chart.defaults.color = '#94a3b8';
+  Chart.defaults.borderColor = 'rgba(51,65,85,.5)';
+  Chart.defaults.font.family = "system-ui,-apple-system,'Segoe UI',sans-serif";
+}
 
-function top() {
+function topInfo() {
   var now = new Date();
-  document.getElementById('curDate').textContent = now.toLocaleDateString('ru-RU');
-  document.getElementById('curTime').textContent = now.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'});
+  document.getElementById('curDate').textContent = now.toLocaleDateString('ru-RU', {weekday:'short', day:'numeric', month:'long', year:'numeric'});
   var cw = D.current_weather || {};
   document.getElementById('curTemp').textContent = (cw.temp == null ? '-' : cw.temp);
   document.getElementById('curPress').textContent = (cw.pressure == null ? '-' : cw.pressure);
   document.getElementById('curMoon').textContent = (cw.moon == null ? '-' : cw.moon);
 }
-top(); setInterval(top, 30000);
+function tick() { document.getElementById('curTime').textContent = new Date().toLocaleTimeString('ru-RU'); }
+topInfo(); tick();
+setInterval(tick, 1000);
+setInterval(topInfo, 60000);
 
 var B = D.balance || {};
 document.getElementById('bs').textContent = B.start || '';
 document.getElementById('st').textContent = B.total_stocked || 0;
 document.getElementById('ct').textContent = B.total_caught || 0;
-document.getElementById('rem').textContent = (B.events && B.events.length) ? ('около ' + (B.remaining || 0) + ' кг') : 'нет данных';
-document.getElementById('dsl').textContent = (B.days_since_stock == null) ? 'нет данных' : (B.days_since_stock + ' дн. назад');
+document.getElementById('rem').textContent = (B.events && B.events.length) ? ('≈ ' + (B.remaining || 0) + ' кг') : 'нет данных';
+var dss = B.days_since_stock;
+document.getElementById('dsl').textContent = (dss == null) ? 'нет данных' : (dss <= 0 ? 'сегодня' : dss + ' дн. назад');
 document.getElementById('upd').textContent = (D.stats && D.stats.updated) || '';
 
 if (B.series && B.series.dates && B.series.dates.length) {
   new Chart(document.getElementById('bal'), {
     data: { labels: B.series.dates, datasets: [
-      { type:'line', label:'Остаток кг', data:B.series.remaining, borderColor:'#fbbf24', pointRadius:0, borderWidth:2, tension:0.3 },
-      { type:'bar', label:'Запуск', data:B.series.stocked, backgroundColor:'#4ade80' },
-      { type:'bar', label:'Вылов', data:B.series.caught, backgroundColor:'#f87171' } ] },
-    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:'#e2e8f0',boxWidth:12}}}, scales:{x:{ticks:{color:'#94a3b8',maxTicksLimit:8}},y:{ticks:{color:'#94a3b8'}}} }
+      { type:'line', label:'Остаток, кг', data:B.series.remaining, borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,.10)', fill:true, pointRadius:0, borderWidth:2, tension:.35 },
+      { type:'bar', label:'Запуск', data:B.series.stocked, backgroundColor:'#34d399', borderRadius:3, maxBarThickness:20 },
+      { type:'bar', label:'Вылов', data:B.series.caught, backgroundColor:'#f87171', borderRadius:3, maxBarThickness:20 } ] },
+    options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{legend:{labels:{color:'#e2e8f0',boxWidth:12}}}, scales:{x:{ticks:{color:'#94a3b8',maxTicksLimit:8}},y:{ticks:{color:'#94a3b8'}}} }
   });
 } else { document.getElementById('balbox').innerHTML = '<div class="note">Пока нет данных о запусках.</div>'; }
 
 if (B.events && B.events.length) {
-  document.getElementById('ev').innerHTML = '<tr><th>Дата</th><th></th><th>кг</th><th>Цитата</th></tr>' + B.events.map(function(e){
-    return '<tr><td>' + e.day + '</td><td>' + (e.type === 'запуск' ? 'З' : 'В') + '</td><td><b>' + e.kg + '</b></td><td class="note"><a href="' + e.url + '" target="_blank">' + e.quote + '</a></td></tr>'; }).join('');
+  document.getElementById('ev').innerHTML = '<thead><tr><th>Дата</th><th style="text-align:center">Тип</th><th>кг</th><th>Комментарий</th></tr></thead><tbody>' + B.events.map(function(e){
+    var z = e.type === 'запуск';
+    return '<tr><td style="white-space:nowrap"><b>' + e.day + '</b></td>' +
+      '<td style="text-align:center"><span class="badge ' + (z ? 'z' : 'v') + '">' + (z ? 'З' : 'В') + '</span></td>' +
+      '<td><b style="color:' + (z ? '#4ade80' : '#f87171') + '">' + e.kg + ' кг</b></td>' +
+      '<td class="note"><a href="' + e.url + '" target="_blank">' + e.quote + '</a></td></tr>';
+  }).join('') + '</tbody>';
 } else { document.getElementById('ev').innerHTML = '<tr><td class="note">Пока нет записей.</td></tr>'; }
 
 var LT = D.llm_time || {};
@@ -207,8 +334,8 @@ if (LT.analyzed > 0) {
   new Chart(document.getElementById('llmchart'), {
     type: 'bar',
     data: { labels: LT.labels, datasets: [
-      { label:'Клевало', data:LT.bite, backgroundColor:'#4ade80' },
-      { label:'Не клевало', data:LT.no_bite, backgroundColor:'#f87171' } ] },
+      { label:'Клевало', data:LT.bite, backgroundColor:'#4ade80', borderRadius:4 },
+      { label:'Не клевало', data:LT.no_bite, backgroundColor:'#f87171', borderRadius:4 } ] },
     options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:'#e2e8f0',boxWidth:12}}}, scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'},beginAtZero:true}} }
   });
 } else {
@@ -220,7 +347,7 @@ var M = D.moon_stats || {};
 if (M.labels && M.labels.length) {
   new Chart(document.getElementById('moonchart'), {
     type:'bar',
-    data:{ labels:M.labels, datasets:[{ label:'Постов в день', data:M.values, backgroundColor:'#a78bfa' }] },
+    data:{ labels:M.labels, datasets:[{ label:'Постов в день', data:M.values, backgroundColor:'#a78bfa', borderRadius:4 }] },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'},beginAtZero:true}} }
   });
 }
@@ -231,36 +358,41 @@ if (D.stats) {
   document.getElementById('days').textContent = D.stats.active_days || 0;
   if (D.stats.monthly) {
     new Chart(document.getElementById('m'), { type:'bar',
-      data:{ labels:Object.keys(D.stats.monthly), datasets:[{ data:Object.values(D.stats.monthly), backgroundColor:'#38bdf8' }] },
+      data:{ labels:Object.keys(D.stats.monthly), datasets:[{ data:Object.values(D.stats.monthly), backgroundColor:'#38bdf8', borderRadius:3, maxBarThickness:14 }] },
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#94a3b8',maxTicksLimit:12}},y:{ticks:{color:'#94a3b8'}}} } });
   }
   if (D.stats.pressure) {
     new Chart(document.getElementById('p'), { type:'bar',
-      data:{ labels:Object.keys(D.stats.pressure), datasets:[{ data:Object.values(D.stats.pressure), backgroundColor:['#ef4444','#eab308','#22c55e'] }] },
+      data:{ labels:Object.keys(D.stats.pressure), datasets:[{ data:Object.values(D.stats.pressure), backgroundColor:['#ef4444','#eab308','#22c55e'], borderRadius:4 }] },
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'},beginAtZero:true}} } });
   }
 }
 
 if (D.table && D.table.length) {
-  document.getElementById('t').innerHTML = '<tr><th>Дата</th><th>П</th><th>t день</th><th>t ночь</th><th>Ветер</th><th>Давл</th><th>Осадки</th><th>Луна</th><th></th></tr>' + D.table.map(function(r){
+  document.getElementById('t').innerHTML = '<thead><tr><th>Дата</th><th>Постов</th><th>t° день</th><th>t° ночь</th><th>Ветер</th><th>Давл.</th><th>Осадки</th><th>Луна</th><th>Ссылки</th></tr></thead><tbody>' + D.table.map(function(r){
     var links = (r.links || []).map(function(u,i){ return '<a href="' + u + '" target="_blank">#' + (i+1) + '</a>'; }).join(' ');
-    return '<tr><td>' + r.day + '</td><td>' + r.posts + '</td><td>' + (r.t_day == null ? '-' : r.t_day) + '</td><td>' + (r.t_night == null ? '-' : r.t_night) + '</td><td>' + (r.wind || '-') + '</td><td>' + (r.pressure == null ? '-' : r.pressure) + '</td><td>' + (r.precip == null ? '-' : r.precip) + '</td><td>' + (r.moon || '-') + '</td><td>' + links + '</td></tr>'; }).join('');
+    return '<tr><td><b>' + r.day + '</b></td><td>' + r.posts + '</td><td>' + (r.t_day == null ? '-' : r.t_day + '°') + '</td><td>' + (r.t_night == null ? '-' : r.t_night + '°') + '</td><td>' + (r.wind || '-') + '</td><td>' + (r.pressure == null ? '-' : r.pressure) + '</td><td>' + (r.precip == null ? '-' : r.precip) + '</td><td>' + (r.moon || '-') + '</td><td>' + links + '</td></tr>'; }).join('') + '</tbody>';
 }
 
 if (D.top_locations && Object.keys(D.top_locations).length) {
-  document.getElementById('toploc').innerHTML = '<tr><th>Точка</th><th>Упоминаний</th></tr>' + Object.keys(D.top_locations).map(function(k){
-    return '<tr><td>' + k + '</td><td><b>' + D.top_locations[k] + '</b></td></tr>'; }).join('');
+  document.getElementById('toploc').innerHTML = '<thead><tr><th>Локация / зона на водоёме</th><th style="text-align:right">Упоминаний</th></tr></thead><tbody>' +
+  Object.keys(D.top_locations).map(function(k){
+    return '<tr><td>📍 ' + k + '</td><td style="text-align:right"><b style="color:#38bdf8">' + D.top_locations[k] + '</b></td></tr>';
+  }).join('') + '</tbody>';
 } else { document.getElementById('toploc').innerHTML = '<tr><td class="note">Пока нет данных.</td></tr>'; }
 
 if (D.top_lures && Object.keys(D.top_lures).length) {
   new Chart(document.getElementById('lure'), { type:'bar',
-    data:{ labels:Object.keys(D.top_lures), datasets:[{ data:Object.values(D.top_lures), backgroundColor:'#38bdf8' }] },
+    data:{ labels:Object.keys(D.top_lures), datasets:[{ data:Object.values(D.top_lures), backgroundColor:'#38bdf8', borderRadius:4 }] },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'},beginAtZero:true}} } });
 }
 
 if (D.reports && D.reports.length) {
-  document.getElementById('reports').innerHTML = '<tr><th>Дата</th><th></th><th>Автор</th><th>Точка</th><th>Приманка</th><th>Цитата</th></tr>' + D.reports.map(function(r){
-    return '<tr><td>' + r.day + '</td><td>' + (r.success ? 'ДА' : '') + '</td><td>' + (r.author || '-') + '</td><td>' + (r.location || '-') + '</td><td>' + (r.lure || '-') + '</td><td class="note"><a href="' + r.url + '" target="_blank">' + r.quote + '</a></td></tr>'; }).join('');
+  document.getElementById('reports').innerHTML = '<thead><tr><th>Дата</th><th>Успех</th><th>Рыбак</th><th>Точка</th><th>Приманка</th><th>Отчёт</th></tr></thead><tbody>' +
+  D.reports.map(function(r){
+    var st = r.success ? '<span class="badge-success">УЛОВ</span>' : '<span style="color:#64748b">—</span>';
+    return '<tr><td style="white-space:nowrap">' + r.day + '</td><td>' + st + '</td><td><b>' + (r.author || '-') + '</b></td><td>' + (r.location || '-') + '</td><td>' + (r.lure || '-') + '</td><td class="note"><a href="' + r.url + '" target="_blank">' + r.quote + '</a></td></tr>';
+  }).join('') + '</tbody>';
 } else { document.getElementById('reports').innerHTML = '<tr><td class="note">Пока нет отчётов.</td></tr>'; }
 
 } catch (err) { console.error(err); }
@@ -717,8 +849,8 @@ def build(db, state, last_page):
                 anchor = loc or lure
                 reports.append({
                     "day": day, "author": author or "",
-                    "location": loc.group(0).lower() if loc else None,
-                    "lure": lure.group(0).lower() if lure else None,
+                    "location": norm_loc(loc.group(0)) if loc else None,
+                    "lure": norm_lure(lure.group(0)) if lure else None,
                     "success": bool(SUCCESS_RX.search(text)),
                     "url": url, "quote": snippet(text, anchor.start(), 110)[:150],
                 })
@@ -838,9 +970,9 @@ def build(db, state, last_page):
     tu = defaultdict(int)
     for r in reports:
         if r["location"]:
-            tl[r["location"]] += 1
+            tl[norm_loc(r["location"])] += 1
         if r["lure"]:
-            tu[r["lure"]] += 1
+            tu[norm_lure(r["lure"])] += 1
 
     cw = weather.get(str(date.today())) or {}
     balance = {"start": BALANCE_START, "total_stocked": total_st, "total_caught": total_ct,
