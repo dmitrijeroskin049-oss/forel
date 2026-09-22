@@ -268,9 +268,9 @@ var B = D.balance || {};
 document.getElementById('bs').textContent = B.start || '';
 document.getElementById('st').textContent = B.total_stocked || 0;
 document.getElementById('ct').textContent = B.total_caught || 0;
-document.getElementById('rem').textContent = (B.events && B.events.length) ? ('\\u2248 ' + (B.remaining || 0) + ' kg') : 'net dannih';
+document.getElementById('rem').textContent = (B.events && B.events.length) ? ('~ ' + (B.remaining || 0) + ' kg') : 'net dannyh';
 var dss = B.days_since_stock;
-document.getElementById('dsl').textContent = (dss == null) ? 'net' : (dss <= 0 ? 'segodnya' : dss + ' dn nazad');
+document.getElementById('dsl').textContent = (dss == null) ? 'net' : (dss <= 0 ? 'segodnya' : dss + ' dn. nazad');
 document.getElementById('upd').textContent = (D.stats && D.stats.updated) || '';
 if (B.series && B.series.dates && B.series.dates.length) {
   new Chart(document.getElementById('bal'), {
@@ -283,7 +283,7 @@ if (B.series && B.series.dates && B.series.dates.length) {
 } else { document.getElementById('balbox').innerHTML = '<div class="note">Net dannyh o zapuskah.</div>'; }
 if (B.events && B.events.length) {
   document.getElementById('ev').innerHTML = '<thead><tr><th>Data</th><th style="text-align:center">Tip</th><th>kg</th><th>Kommentarij</th></tr></thead><tbody>' + B.events.map(function(e){
-    var z = e.type === 'zapusk';
+    var z = (e.type === 'zapusk');
     return '<tr><td style="white-space:nowrap"><b>' + e.day + '</b></td>' +
       '<td style="text-align:center"><span class="badge ' + (z ? 'z' : 'v') + '">' + (z ? 'Z' : 'V') + '</span></td>' +
       '<td><b style="color:' + (z ? '#4ade80' : '#f87171') + '">' + e.kg + ' kg</b></td>' +
@@ -601,7 +601,7 @@ def find_events(text, post_dt):
     for m in KG_RX.finditer(text):
         s, e = m.span()
         before = text[max(0, s - 45):s].lower()
-        if re.search(r"\\u043d\\u0430\\u0432\\u0435\\u0441\\u043a\w*[^0-9]{0,25}$", before):
+        if re.search(r"navesk\w*[^0-9]{0,25}$", before):
             continue
         if OTHER_FISH.search(text[max(0, s - 25):min(len(text), e + 25)]):
             continue
@@ -613,7 +613,7 @@ def find_events(text, post_dt):
             v2 = m.group(2)
             val = (v1 + float(v2.replace(",", "."))) / 2 if v2 else v1
             unit = (m.group(3) or "").lower()
-            if unit.startswith("\\u0442\\u043e\\u043d") or unit == "т":
+            if unit.startswith("ton") or unit == "t":
                 val *= 1000
             kg = int(round(val))
         except Exception:
