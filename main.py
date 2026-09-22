@@ -60,7 +60,6 @@ MOON_ORDER = ["новолуние", "растущий серп", "первая �
 TIME_PERIODS = ["утро", "день", "вечер", "ночь"]
 
 
-# === Группировка точек и приманок ===
 def norm_loc(s):
     s = (s or "").lower().strip()
     if "понтон" in s or "пантон" in s:
@@ -75,18 +74,14 @@ def norm_loc(s):
         return "спорт зона"
     if "угол" in s:
         return "дальний угол"
-    if "администрац" in s or "берёз" in s:
-        return "под берёзами"
     return s
 
 def norm_lure(s):
     s = (s or "").lower().strip()
     if "резин" in s:
         return "резина"
-    if "светонакоп" in s and "стрейч" in s:
-        return "стрейч (светонакопительный)"
     if "светонакоп" in s:
-        return "светонакопительный"
+        return "стрейч (светонакопительный)"
     if "стрейч" in s:
         return "стрейч"
     if "магот" in s:
@@ -104,7 +99,6 @@ def norm_lure(s):
     return s
 
 
-# === HTML-шаблон (НОВЫЙ ДИЗАЙН) ===
 TEMPLATE = """<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -117,12 +111,7 @@ TEMPLATE = """<!DOCTYPE html>
 <style>
 *{box-sizing:border-box}
 html{background:#0b1221}
-body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;margin:0 auto;padding:18px 12px 40px;color:#e2e8f0;max-width:860px;
-  background:
-    radial-gradient(700px 340px at 88% -60px, rgba(56,189,248,.14), transparent 70%),
-    radial-gradient(560px 300px at -70px 220px, rgba(167,139,250,.10), transparent 70%),
-    radial-gradient(600px 320px at 110% 65%, rgba(251,191,36,.06), transparent 70%);
-  background-attachment:fixed}
+body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;margin:0 auto;padding:18px 12px 40px;color:#e2e8f0;max-width:860px;background:radial-gradient(700px 340px at 88% -60px, rgba(56,189,248,.14), transparent 70%),radial-gradient(560px 300px at -70px 220px, rgba(167,139,250,.10), transparent 70%),radial-gradient(600px 320px at 110% 65%, rgba(251,191,36,.06), transparent 70%);background-attachment:fixed}
 a{color:#7dd3fc;text-decoration:none}
 a:hover{text-decoration:underline}
 .note{font-size:.75rem;color:#94a3b8;line-height:1.55}
@@ -132,43 +121,33 @@ a:hover{text-decoration:underline}
 .ttl{display:flex;align-items:center;gap:12px}
 .fish{display:inline-block;font-size:1.9rem;animation:bob 3.2s ease-in-out infinite}
 @keyframes bob{0%,100%{transform:translateY(0) rotate(-5deg)}50%{transform:translateY(-5px) rotate(6deg)}}
-h1{margin:0;font-size:1.75rem;font-weight:900;letter-spacing:.3px;
-  background:linear-gradient(92deg,#7dd3fc 0%,#38bdf8 35%,#a78bfa 70%,#fbbf24 100%);
-  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:#7dd3fc}
+h1{margin:0;font-size:1.75rem;font-weight:900;letter-spacing:.3px;background:linear-gradient(92deg,#7dd3fc 0%,#38bdf8 35%,#a78bfa 70%,#fbbf24 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:#7dd3fc}
 .hero p{margin:7px 0 0;color:#94a3b8;font-size:.83rem;letter-spacing:.4px}
-details{margin:12px 0;border:1px solid rgba(148,163,184,.16);border-radius:16px;overflow:hidden;
-  background:linear-gradient(180deg,rgba(30,41,59,.92),rgba(21,31,52,.92));box-shadow:0 10px 30px rgba(2,6,23,.45);transition:border-color .2s}
+details{margin:12px 0;border:1px solid rgba(148,163,184,.16);border-radius:16px;overflow:hidden;background:linear-gradient(180deg,rgba(30,41,59,.92),rgba(21,31,52,.92));box-shadow:0 10px 30px rgba(2,6,23,.45);transition:border-color .2s}
 details[open]{border-color:rgba(56,189,248,.30)}
-summary{position:relative;padding:13px 42px 13px 15px;font-weight:800;color:#7dd3fc;cursor:pointer;list-style:none;user-select:none;
-  background:linear-gradient(90deg,rgba(56,189,248,.09),transparent 65%)}
+summary{position:relative;padding:13px 42px 13px 15px;font-weight:800;color:#7dd3fc;cursor:pointer;list-style:none;user-select:none;background:linear-gradient(90deg,rgba(56,189,248,.09),transparent 65%)}
 summary:hover{color:#bae6fd}
 summary::-webkit-details-marker{display:none}
 summary::after{content:'▾';position:absolute;right:15px;top:50%;transform:translateY(-50%);color:#64748b;transition:transform .25s}
 details[open] summary::after{transform:translateY(-50%) rotate(180deg);color:#38bdf8}
-#topbar{display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(30,41,59,.95),rgba(21,31,52,.95));
-  border:1px solid rgba(148,163,184,.16);border-radius:16px;padding:4px 15px;margin:0 0 14px;box-shadow:0 10px 30px rgba(2,6,23,.45)}
+#topbar{display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(30,41,59,.95),rgba(21,31,52,.95));border:1px solid rgba(148,163,184,.16);border-radius:16px;padding:4px 15px;margin:0 0 14px;box-shadow:0 10px 30px rgba(2,6,23,.45)}
 .trow{display:flex;align-items:center;gap:12px;padding:10px 0}
 .trow + .trow{border-top:1px dashed rgba(148,163,184,.15)}
-.ticon{width:38px;height:38px;flex:none;display:flex;align-items:center;justify-content:center;font-size:1.1rem;
-  border-radius:12px;background:rgba(56,189,248,.10);border:1px solid rgba(56,189,248,.22)}
+.ticon{width:38px;height:38px;flex:none;display:flex;align-items:center;justify-content:center;font-size:1.1rem;border-radius:12px;background:rgba(56,189,248,.10);border:1px solid rgba(56,189,248,.22)}
 .tlabel{color:#94a3b8;font-size:.74rem;text-transform:uppercase;letter-spacing:.8px;width:88px;flex:none}
 .trow b{font-size:.95rem;color:#f1f5f9;font-weight:700}
-.badge{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;
-  font-weight:900;font-size:.7rem;color:#fff;vertical-align:middle}
+.badge{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-weight:900;font-size:.7rem;color:#fff;vertical-align:middle}
 .badge.z{background:linear-gradient(135deg,#34d399,#16a34a);box-shadow:0 0 10px rgba(52,211,153,.45)}
 .badge.v{background:linear-gradient(135deg,#fb7185,#dc2626);box-shadow:0 0 10px rgba(248,113,113,.45)}
-.badge-success{display:inline-block;background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.35);
-  padding:2px 7px;border-radius:5px;font-weight:800;font-size:.66rem;letter-spacing:.4px;white-space:nowrap}
-.price{display:inline-block;background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.30);color:#fbbf24;
-  font-weight:800;padding:4px 12px;border-radius:999px;font-size:.82rem;white-space:nowrap}
+.badge-success{display:inline-block;background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.35);padding:2px 7px;border-radius:5px;font-weight:800;font-size:.66rem;letter-spacing:.4px;white-space:nowrap}
+.price{display:inline-block;background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.30);color:#fbbf24;font-weight:800;padding:4px 12px;border-radius:999px;font-size:.82rem;white-space:nowrap}
 .pricelist td{padding:9px 6px}
 .pr{text-align:right;white-space:nowrap}
 .rules{list-style:none;margin:12px 0 2px;padding:0;display:grid;gap:7px;font-size:.84rem}
 .rules li{background:rgba(148,163,184,.06);border:1px solid rgba(148,163,184,.12);border-radius:11px;padding:9px 12px;line-height:1.45}
 .rules b{color:#fbbf24}
 .btnrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:13px}
-.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 15px;border-radius:12px;font-weight:800;font-size:.85rem;
-  text-decoration:none;transition:transform .15s}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 15px;border-radius:12px;font-weight:800;font-size:.85rem;text-decoration:none;transition:transform .15s}
 .btn:hover{transform:translateY(-1px);text-decoration:none}
 .btn-call{background:linear-gradient(135deg,#0ea5e9,#38bdf8);color:#04263f;box-shadow:0 6px 16px rgba(56,189,248,.30)}
 .btn-map{background:rgba(56,189,248,.10);border:1px solid rgba(56,189,248,.35);color:#7dd3fc}
@@ -186,12 +165,10 @@ footer{margin-top:20px;text-align:center}
 </style>
 </head>
 <body>
-
 <header class="hero">
   <div class="ttl"><span class="fish">🐟</span><h1>Форель в Красногорске</h1></div>
   <p>погода • запуски • баланс водоёма • отчёты рыбаков</p>
 </header>
-
 <div id="topbar">
   <div class="trow"><span class="ticon">📅</span><span class="tlabel">Дата</span><b id="curDate">-</b></div>
   <div class="trow"><span class="ticon">⏰</span><span class="tlabel">Время</span><b id="curTime">-</b></div>
@@ -199,7 +176,6 @@ footer{margin-top:20px;text-align:center}
   <div class="trow"><span class="ticon">📊</span><span class="tlabel">Давление</span><b><span id="curPress">-</span> мм рт. ст.</b></div>
   <div class="trow"><span class="ticon">🌙</span><span class="tlabel">Луна</span><b id="curMoon">-</b></div>
 </div>
-
 <details open><summary>🎫 Условия рыбалки и цены</summary><div class="card">
 <div class="scrollx"><table class="narrow pricelist">
 <tr><td>🌅 07:00 – 18:00</td><td class="pr"><span class="price">4 000 ₽</span></td></tr>
@@ -223,33 +199,27 @@ footer{margin-top:20px;text-align:center}
 </div>
 <p class="note" style="margin-top:11px">Цены и правила обновляются вручную. Актуально на 22.09.2026.</p>
 </div></details>
-
 <details open><summary>🐟 Остаток форели в водоёме</summary><div class="card">
 <div class="big" id="rem">-</div>
 <div class="note">запущено <b id="st" style="color:#4ade80">0</b> кг • выловлено <b id="ct" style="color:#f87171">0</b> кг • отсчёт с <span id="bs"></span><br>
 последний запуск: <span id="dsl">-</span> • обновлено <span id="upd"></span></div>
 </div></details>
-
 <details open><summary>📊 Баланс</summary><div class="card" id="balbox">
 <div class="chartbox"><canvas id="bal"></canvas></div>
 </div></details>
-
 <details><summary>📓 Журнал запусков и выловов</summary><div class="card">
 <div class="scrollx"><table id="ev"></table></div>
 <div class="note" style="margin-top:10px"><span class="badge z">З</span> — запуск форели &nbsp;•&nbsp; <span class="badge v">В</span> — вылов за день</div>
 </div></details>
-
 <details><summary>🕒 Когда клюёт (анализ LLM)</summary><div class="card">
 <div class="note" id="llmnote"></div>
 <div class="chartbox"><canvas id="llmchart"></canvas></div>
 <div class="note">Отчёты прочитаны языковой моделью: «утром тишина, вечером раздача» учитывается верно.</div>
 </div></details>
-
 <details><summary>🌙 Луна и клёв</summary><div class="card">
 <div class="chartbox"><canvas id="moonchart"></canvas></div>
 <div class="note">Средняя активность отчётов в каждой фазе луны с 2024 года.</div>
 </div></details>
-
 <details><summary>📈 Активность обсуждений с 2024</summary><div class="card">
 <div class="note" id="prog"></div>
 <div class="big" style="color:#38bdf8;text-shadow:0 0 24px rgba(56,189,248,.35)" id="total">0</div>
@@ -262,7 +232,6 @@ footer{margin-top:20px;text-align:center}
 <div class="scrollx"><table id="t"></table></div>
 <div class="note">t день — максимум, t ночь — минимум за сутки.</div>
 </div></details>
-
 <details open><summary>🎯 Где и на что ловят (точки и приманки)</summary><div class="card">
 <h3 style="font-size:.9rem;color:#93c5fd;margin:2px 0 6px">📍 Популярные локации</h3>
 <div class="scrollx"><table id="toploc" style="min-width:100%"></table></div>
@@ -272,9 +241,7 @@ footer{margin-top:20px;text-align:center}
 <div class="scrollx"><table id="reports"></table></div>
 <div class="note">Кликните по тексту отчёта, чтобы открыть оригинальное сообщение на форуме Rusfishing.</div>
 </div></details>
-
 <footer><p class="note">🐟 Данные собираются с форума rusfishing.ru</p></footer>
-
 <script type="application/json" id="sitedata">__DATA__</script>
 <script>
 var D = {};
@@ -285,7 +252,6 @@ if (window.Chart) {
   Chart.defaults.borderColor = 'rgba(51,65,85,.5)';
   Chart.defaults.font.family = "system-ui,-apple-system,'Segoe UI',sans-serif";
 }
-
 function topInfo() {
   var now = new Date();
   document.getElementById('curDate').textContent = now.toLocaleDateString('ru-RU', {weekday:'short', day:'numeric', month:'long', year:'numeric'});
@@ -298,62 +264,56 @@ function tick() { document.getElementById('curTime').textContent = new Date().to
 topInfo(); tick();
 setInterval(tick, 1000);
 setInterval(topInfo, 60000);
-
 var B = D.balance || {};
 document.getElementById('bs').textContent = B.start || '';
 document.getElementById('st').textContent = B.total_stocked || 0;
 document.getElementById('ct').textContent = B.total_caught || 0;
-document.getElementById('rem').textContent = (B.events && B.events.length) ? ('≈ ' + (B.remaining || 0) + ' кг') : 'нет данных';
+document.getElementById('rem').textContent = (B.events && B.events.length) ? ('\\u2248 ' + (B.remaining || 0) + ' kg') : 'net dannih';
 var dss = B.days_since_stock;
-document.getElementById('dsl').textContent = (dss == null) ? 'нет данных' : (dss <= 0 ? 'сегодня' : dss + ' дн. назад');
+document.getElementById('dsl').textContent = (dss == null) ? 'net' : (dss <= 0 ? 'segodnya' : dss + ' dn nazad');
 document.getElementById('upd').textContent = (D.stats && D.stats.updated) || '';
-
 if (B.series && B.series.dates && B.series.dates.length) {
   new Chart(document.getElementById('bal'), {
     data: { labels: B.series.dates, datasets: [
-      { type:'line', label:'Остаток, кг', data:B.series.remaining, borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,.10)', fill:true, pointRadius:0, borderWidth:2, tension:.35 },
-      { type:'bar', label:'Запуск', data:B.series.stocked, backgroundColor:'#34d399', borderRadius:3, maxBarThickness:20 },
-      { type:'bar', label:'Вылов', data:B.series.caught, backgroundColor:'#f87171', borderRadius:3, maxBarThickness:20 } ] },
+      { type:'line', label:'Ostatok kg', data:B.series.remaining, borderColor:'#fbbf24', backgroundColor:'rgba(251,191,36,.10)', fill:true, pointRadius:0, borderWidth:2, tension:.35 },
+      { type:'bar', label:'Zapusk', data:B.series.stocked, backgroundColor:'#34d399', borderRadius:3, maxBarThickness:20 },
+      { type:'bar', label:'Vylov', data:B.series.caught, backgroundColor:'#f87171', borderRadius:3, maxBarThickness:20 } ] },
     options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{legend:{labels:{color:'#e2e8f0',boxWidth:12}}}, scales:{x:{ticks:{color:'#94a3b8',maxTicksLimit:8}},y:{ticks:{color:'#94a3b8'}}} }
   });
-} else { document.getElementById('balbox').innerHTML = '<div class="note">Пока нет данных о запусках.</div>'; }
-
+} else { document.getElementById('balbox').innerHTML = '<div class="note">Net dannyh o zapuskah.</div>'; }
 if (B.events && B.events.length) {
-  document.getElementById('ev').innerHTML = '<thead><tr><th>Дата</th><th style="text-align:center">Тип</th><th>кг</th><th>Комментарий</th></tr></thead><tbody>' + B.events.map(function(e){
-    var z = e.type === 'запуск';
+  document.getElementById('ev').innerHTML = '<thead><tr><th>Data</th><th style="text-align:center">Tip</th><th>kg</th><th>Kommentarij</th></tr></thead><tbody>' + B.events.map(function(e){
+    var z = e.type === 'zapusk';
     return '<tr><td style="white-space:nowrap"><b>' + e.day + '</b></td>' +
-      '<td style="text-align:center"><span class="badge ' + (z ? 'z' : 'v') + '">' + (z ? 'З' : 'В') + '</span></td>' +
-      '<td><b style="color:' + (z ? '#4ade80' : '#f87171') + '">' + e.kg + ' кг</b></td>' +
+      '<td style="text-align:center"><span class="badge ' + (z ? 'z' : 'v') + '">' + (z ? 'Z' : 'V') + '</span></td>' +
+      '<td><b style="color:' + (z ? '#4ade80' : '#f87171') + '">' + e.kg + ' kg</b></td>' +
       '<td class="note"><a href="' + e.url + '" target="_blank">' + e.quote + '</a></td></tr>';
   }).join('') + '</tbody>';
-} else { document.getElementById('ev').innerHTML = '<tr><td class="note">Пока нет записей.</td></tr>'; }
-
+} else { document.getElementById('ev').innerHTML = '<tr><td class="note">Net zapisej.</td></tr>'; }
 var LT = D.llm_time || {};
 if (LT.analyzed > 0) {
-  document.getElementById('llmnote').textContent = 'Проанализировано отчётов: ' + LT.analyzed;
+  document.getElementById('llmnote').textContent = 'Proanalizirovano otchetov: ' + LT.analyzed;
   new Chart(document.getElementById('llmchart'), {
     type: 'bar',
     data: { labels: LT.labels, datasets: [
-      { label:'Клевало', data:LT.bite, backgroundColor:'#4ade80', borderRadius:4 },
-      { label:'Не клевало', data:LT.no_bite, backgroundColor:'#f87171', borderRadius:4 } ] },
+      { label:'Klevalo', data:LT.bite, backgroundColor:'#4ade80', borderRadius:4 },
+      { label:'Ne klevalo', data:LT.no_bite, backgroundColor:'#f87171', borderRadius:4 } ] },
     options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:'#e2e8f0',boxWidth:12}}}, scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'},beginAtZero:true}} }
   });
 } else {
-  document.getElementById('llmnote').textContent = LT.enabled ? 'Отчёты ещё не проанализированы, данные появятся после следующих запусков.' : 'LLM-анализ отключён (нет ключа).';
+  document.getElementById('llmnote').textContent = LT.enabled ? 'Otgety esche ne proanalizirovany.' : 'LLM viklyuchen (net klyucha).';
   document.getElementById('llmchart').parentNode.style.display = 'none';
 }
-
 var M = D.moon_stats || {};
 if (M.labels && M.labels.length) {
   new Chart(document.getElementById('moonchart'), {
     type:'bar',
-    data:{ labels:M.labels, datasets:[{ label:'Постов в день', data:M.values, backgroundColor:'#a78bfa', borderRadius:4 }] },
+    data:{ labels:M.labels, datasets:[{ label:'Postov v den', data:M.values, backgroundColor:'#a78bfa', borderRadius:4 }] },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'},beginAtZero:true}} }
   });
 }
-
 if (D.stats) {
-  document.getElementById('prog').textContent = 'Собрано страниц: ' + D.stats.collected + ' из ' + D.stats.need + ' (' + D.stats.pct + '%)';
+  document.getElementById('prog').textContent = 'Sobrano stranic: ' + D.stats.collected + ' iz ' + D.stats.need + ' (' + D.stats.pct + '%)';
   document.getElementById('total').textContent = D.stats.total_posts || 0;
   document.getElementById('days').textContent = D.stats.active_days || 0;
   if (D.stats.monthly) {
@@ -367,34 +327,29 @@ if (D.stats) {
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'},beginAtZero:true}} } });
   }
 }
-
 if (D.table && D.table.length) {
-  document.getElementById('t').innerHTML = '<thead><tr><th>Дата</th><th>Постов</th><th>t° день</th><th>t° ночь</th><th>Ветер</th><th>Давл.</th><th>Осадки</th><th>Луна</th><th>Ссылки</th></tr></thead><tbody>' + D.table.map(function(r){
+  document.getElementById('t').innerHTML = '<thead><tr><th>Data</th><th>Postov</th><th>t den</th><th>t noch</th><th>Veter</th><th>Davl</th><th>Osadki</th><th>Luna</th><th>Ssyulki</th></tr></thead><tbody>' + D.table.map(function(r){
     var links = (r.links || []).map(function(u,i){ return '<a href="' + u + '" target="_blank">#' + (i+1) + '</a>'; }).join(' ');
-    return '<tr><td><b>' + r.day + '</b></td><td>' + r.posts + '</td><td>' + (r.t_day == null ? '-' : r.t_day + '°') + '</td><td>' + (r.t_night == null ? '-' : r.t_night + '°') + '</td><td>' + (r.wind || '-') + '</td><td>' + (r.pressure == null ? '-' : r.pressure) + '</td><td>' + (r.precip == null ? '-' : r.precip) + '</td><td>' + (r.moon || '-') + '</td><td>' + links + '</td></tr>'; }).join('') + '</tbody>';
+    return '<tr><td><b>' + r.day + '</b></td><td>' + r.posts + '</td><td>' + (r.t_day == null ? '-' : r.t_day) + '</td><td>' + (r.t_night == null ? '-' : r.t_night) + '</td><td>' + (r.wind || '-') + '</td><td>' + (r.pressure == null ? '-' : r.pressure) + '</td><td>' + (r.precip == null ? '-' : r.precip) + '</td><td>' + (r.moon || '-') + '</td><td>' + links + '</td></tr>'; }).join('') + '</tbody>';
 }
-
 if (D.top_locations && Object.keys(D.top_locations).length) {
-  document.getElementById('toploc').innerHTML = '<thead><tr><th>Локация / зона на водоёме</th><th style="text-align:right">Упоминаний</th></tr></thead><tbody>' +
+  document.getElementById('toploc').innerHTML = '<thead><tr><th>Lokaciya / zona na vodoeme</th><th style="text-align:right">Upominanij</th></tr></thead><tbody>' +
   Object.keys(D.top_locations).map(function(k){
-    return '<tr><td>📍 ' + k + '</td><td style="text-align:right"><b style="color:#38bdf8">' + D.top_locations[k] + '</b></td></tr>';
+    return '<tr><td>' + k + '</td><td style="text-align:right"><b style="color:#38bdf8">' + D.top_locations[k] + '</b></td></tr>';
   }).join('') + '</tbody>';
-} else { document.getElementById('toploc').innerHTML = '<tr><td class="note">Пока нет данных.</td></tr>'; }
-
+} else { document.getElementById('toploc').innerHTML = '<tr><td class="note">Net dannyh.</td></tr>'; }
 if (D.top_lures && Object.keys(D.top_lures).length) {
   new Chart(document.getElementById('lure'), { type:'bar',
     data:{ labels:Object.keys(D.top_lures), datasets:[{ data:Object.values(D.top_lures), backgroundColor:'#38bdf8', borderRadius:4 }] },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'},beginAtZero:true}} } });
 }
-
 if (D.reports && D.reports.length) {
-  document.getElementById('reports').innerHTML = '<thead><tr><th>Дата</th><th>Успех</th><th>Рыбак</th><th>Точка</th><th>Приманка</th><th>Отчёт</th></tr></thead><tbody>' +
+  document.getElementById('reports').innerHTML = '<thead><tr><th>Data</th><th>Uspeh</th><th>Rybak</th><th>Tochka</th><th>Primanka</th><th>Otchet</th></tr></thead><tbody>' +
   D.reports.map(function(r){
-    var st = r.success ? '<span class="badge-success">УЛОВ</span>' : '<span style="color:#64748b">—</span>';
+    var st = r.success ? '<span class="badge-success">ULOV</span>' : '<span style="color:#64748b">-</span>';
     return '<tr><td style="white-space:nowrap">' + r.day + '</td><td>' + st + '</td><td><b>' + (r.author || '-') + '</b></td><td>' + (r.location || '-') + '</td><td>' + (r.lure || '-') + '</td><td class="note"><a href="' + r.url + '" target="_blank">' + r.quote + '</a></td></tr>';
   }).join('') + '</tbody>';
-} else { document.getElementById('reports').innerHTML = '<tr><td class="note">Пока нет отчётов.</td></tr>'; }
-
+} else { document.getElementById('reports').innerHTML = '<tr><td class="note">Net otchetov.</td></tr>'; }
 } catch (err) { console.error(err); }
 </script>
 </body>
@@ -609,7 +564,7 @@ def resolve_event_date(text, start, end, post_dt):
                 return ("%04d-%02d-%02d" % (y, mm, dd), True)
         except Exception:
             pass
-    if "завтра" in line.lower():
+    if "zavtra" in line.lower():
         try:
             return (str(date.fromisoformat(pd) + timedelta(days=1)), True)
         except Exception:
@@ -646,7 +601,7 @@ def find_events(text, post_dt):
     for m in KG_RX.finditer(text):
         s, e = m.span()
         before = text[max(0, s - 45):s].lower()
-        if re.search(r"навеск\w*[^0-9]{0,25}$", before):
+        if re.search(r"\\u043d\\u0430\\u0432\\u0435\\u0441\\u043a\w*[^0-9]{0,25}$", before):
             continue
         if OTHER_FISH.search(text[max(0, s - 25):min(len(text), e + 25)]):
             continue
@@ -658,7 +613,7 @@ def find_events(text, post_dt):
             v2 = m.group(2)
             val = (v1 + float(v2.replace(",", "."))) / 2 if v2 else v1
             unit = (m.group(3) or "").lower()
-            if unit.startswith("тон") or unit == "т":
+            if unit.startswith("\\u0442\\u043e\\u043d") or unit == "т":
                 val *= 1000
             kg = int(round(val))
         except Exception:
@@ -760,7 +715,6 @@ def download(db, state):
         return state.get("newest", 1)
     last = total_pages(html)
     print("Vsego stranic:", last)
-
     if not state.get("start_page"):
         print("Ischu 2024 god...")
         lo, hi = 1, last
@@ -777,13 +731,11 @@ def download(db, state):
         state["start_page"] = max(1, lo - 1)
         state["cursor"] = last
         state["newest"] = last
-
     start_page = state["start_page"]
     todo = []
     if last > state.get("newest", last):
         todo += list(range(state["newest"] + 1, last + 1))
     state["newest"] = last
-
     cur = state.get("cursor", last)
     added = []
     while len(added) < BATCH and cur >= start_page:
@@ -791,11 +743,9 @@ def download(db, state):
             added.append(cur)
         cur -= 1
     state["cursor"] = cur
-
     tail = list(range(max(start_page, last - REFRESH_TAIL + 1), last + 1))
     todo = sorted(set(todo + added + tail))
     print("Zagruzhau " + str(len(todo)) + " stranic")
-
     for i, p in enumerate(todo):
         h = fetch(page_url(p))
         if h:
@@ -807,7 +757,6 @@ def download(db, state):
         time.sleep(random.uniform(1.2, 2.0))
         if (i + 1) % 20 == 0:
             save_state(state)
-
     for fn in os.listdir(PAGES_DIR):
         if not fn.endswith(".json"):
             continue
@@ -821,7 +770,6 @@ def download(db, state):
             db.commit()
         except Exception as e:
             print("file err", fn, e)
-
     save_state(state)
     return last
 
@@ -832,7 +780,6 @@ def build(db, state, last_page):
     catch_c = defaultdict(list)
     reports = []
     llm_cands = []
-
     for pid, page, author, dt, text in db.execute("SELECT post_id, page, author, post_dt, text FROM posts"):
         day = (dt or "")[:10]
         url = THREAD + "/page-" + str(page) + "#post-" + str(pid)
@@ -841,7 +788,6 @@ def build(db, state, last_page):
             days[day].append(url)
         if not day:
             continue
-
         if day >= REPORT_START and (author or "") not in ADMIN_AUTHORS and FOREL_RX.search(text):
             loc = LOCATION_RX.search(text)
             lure = LURE_RX.search(text)
@@ -856,7 +802,6 @@ def build(db, state, last_page):
                 })
             if TIME_HINT_RX.search(text):
                 llm_cands.append((pid, day, text))
-
         if (author or "") not in ADMIN_AUTHORS:
             continue
         if day < BALANCE_START:
@@ -865,7 +810,6 @@ def build(db, state, last_page):
                     continue
             except Exception:
                 continue
-
         for ev in find_events(text, dt):
             d = ev["day"]
             if not d or d < BALANCE_START:
@@ -874,30 +818,26 @@ def build(db, state, last_page):
                 continue
             rec = {"kg": ev["kg"], "url": url, "dt": dt, "pos": ev["pos"],
                    "is_fact": (dt[:10] == d),
-                   "quote": ("пост " + dt[5:10] + " " + dt[11:16] + " " + ev["quote"])[:150]}
+                   "quote": ("post " + dt[5:10] + " " + dt[11:16] + " " + ev["quote"])[:150]}
             if ev["kind"] == "stock":
                 stock_c[d].append(rec)
             else:
                 catch_c[d].append(rec)
-
     day_events = {}
     for d, recs in stock_c.items():
         pool = [r for r in recs if r["is_fact"]] or recs
         day_events.setdefault(d, {})["stock"] = max(pool, key=lambda r: (r["dt"], r["pos"]))
     for d, recs in catch_c.items():
         day_events.setdefault(d, {})["catch"] = max(recs, key=lambda r: (r["dt"], r["pos"]))
-
     weather = load_weather()
-
     llm_cands.sort(key=lambda c: c[1], reverse=True)
     agg, analyzed = run_llm(db, llm_cands)
     llm_time = {"enabled": bool(LLM_API_KEY), "analyzed": analyzed, "labels": TIME_PERIODS,
                 "bite": [agg[p]["bite"] for p in TIME_PERIODS],
                 "no_bite": [agg[p]["no_bite"] for p in TIME_PERIODS]}
-
     moon_b = defaultdict(list)
     monthly = defaultdict(list)
-    press_g = {"ниже 745": [], "745-760": [], "выше 760": []}
+    press_g = {"nizhe 745": [], "745-760": [], "vyshe 760": []}
     for d, urls in days.items():
         monthly[d[:7]].append(len(urls))
         ph = moon_phase(d)
@@ -905,35 +845,29 @@ def build(db, state, last_page):
             moon_b[ph].append(len(urls))
         pr = (weather.get(d) or {}).get("pressure")
         if pr is not None:
-            g = "ниже 745" if pr < 745 else ("745-760" if pr <= 760 else "выше 760")
+            g = "nizhe 745" if pr < 745 else ("745-760" if pr <= 760 else "vyshe 760")
             press_g[g].append(len(urls))
-
     def avg(v):
         return round(sum(v) / len(v), 2) if v else 0
-
     moon_labels = [p for p in MOON_ORDER if p in moon_b]
     moon_stats = {"labels": moon_labels, "values": [avg(moon_b[p]) for p in moon_labels],
                   "days": [len(moon_b[p]) for p in moon_labels]}
-
     collected = len([f for f in os.listdir(PAGES_DIR) if f.endswith(".json")])
     need = max(1, state.get("newest", last_page) - state.get("start_page", last_page) + 1)
-
     stats = {"monthly": dict((k, avg(v)) for k, v in sorted(monthly.items())),
              "pressure": dict((k, avg(v)) for k, v in press_g.items()),
              "total_posts": sum(len(v) for v in days.values()),
              "active_days": len(days), "collected": collected, "need": need,
              "pct": round(collected / need * 100, 1), "updated": str(date.today())}
-
     table = []
     for d in sorted(days, reverse=True)[:60]:
         w = weather.get(d) or {}
         wind = None
         if w.get("wind_speed") is not None:
-            wind = (w.get("wind_dir") or "?") + " " + str(w["wind_speed"]) + " м/с"
+            wind = (w.get("wind_dir") or "?") + " " + str(w["wind_speed"]) + " m/s"
         table.append({"day": d, "posts": len(days[d]), "t_day": w.get("t_day"),
                       "t_night": w.get("t_night"), "wind": wind, "pressure": w.get("pressure"),
                       "precip": w.get("precip"), "moon": moon_phase(d), "links": days[d][:5]})
-
     dates, st_l, ct_l, rm_l = [], [], [], []
     total_st = total_ct = 0
     last_stock = None
@@ -956,15 +890,13 @@ def build(db, state, last_page):
             ct_l.append(c)
             rm_l.append(rem)
             cur += timedelta(days=1)
-
     events = []
     for d in sorted(day_events, reverse=True)[:40]:
         for k in ("stock", "catch"):
             if k in day_events[d]:
                 e = day_events[d][k]
-                events.append({"day": d, "type": "запуск" if k == "stock" else "вылов",
+                events.append({"day": d, "type": "zapusk" if k == "stock" else "vylov",
                                "kg": e["kg"], "url": e["url"], "quote": e["quote"]})
-
     reports.sort(key=lambda r: r["day"], reverse=True)
     tl = defaultdict(int)
     tu = defaultdict(int)
@@ -973,14 +905,12 @@ def build(db, state, last_page):
             tl[norm_loc(r["location"])] += 1
         if r["lure"]:
             tu[norm_lure(r["lure"])] += 1
-
     cw = weather.get(str(date.today())) or {}
     balance = {"start": BALANCE_START, "total_stocked": total_st, "total_caught": total_ct,
                "remaining": rm_l[-1] if rm_l else 0,
                "days_since_stock": (date.today() - date.fromisoformat(last_stock)).days if last_stock else None,
                "series": {"dates": dates, "stocked": st_l, "caught": ct_l, "remaining": rm_l},
                "events": events}
-
     payload = json.dumps({
         "stats": stats, "table": table, "balance": balance,
         "current_weather": {"temp": cw.get("t_day"), "pressure": cw.get("pressure"),
@@ -989,7 +919,6 @@ def build(db, state, last_page):
         "top_locations": dict(sorted(tl.items(), key=lambda x: -x[1])[:12]),
         "top_lures": dict(sorted(tu.items(), key=lambda x: -x[1])[:12]),
     }, ensure_ascii=False).replace("</", "<\\/")
-
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(TEMPLATE.replace("__DATA__", payload))
     print("Sait sobran. Ostatok " + str(balance["remaining"]) + " kg, otchetov " + str(len(reports)) + ", LLM " + str(analyzed))
