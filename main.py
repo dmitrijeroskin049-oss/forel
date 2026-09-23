@@ -592,120 +592,296 @@ def download(db, state):
     save_state(state); return last
 
 def build(db, state, last_page):
-    days = defaultdict(list); stock_c = defaultdict(list); catch_c = defaultdict(list)
-    reports = []; llm_cands = []
-    for pid, page, author, dt, text in db.execute("SELECT post_id, page, author, post_dt, text FROM posts"):
+    days = defaultdict(list)
+    stock_c = defaultdict(list)
+    catch_c = defaultdict(list)
+    reports = []
+    llm_cands = []
+
+    # Разбор всех постов
+    for pid, page, author, dt, text in db.execute(
+        "SELECT post_id, page, author, post_dt, text FROM posts"
+    ):
         day = (dt or "")[:10]
         url = THREAD + "/page-" + str(page) + "#post-" + str(pid)
         text = text or ""
-        if day and day >= START_DATE and FOREL_RX.search(text): days[day].append(url)
-        if not day: continue
-        if day >= REPORT_START and (author or "") not in ADMIN_AUTHORS and FOREL_RX.search(text):
-            loc = LOCATION_RX.search(text); lure = LURE_RX.search(text)
+
+        # Посты про форель для общей статистики
+        if day and day >= START_DATE and FOREL_RX.search(text):
+            days[day].append(url)
+
+        if not day:
+            continue
+
+        # Отчёты обычных рыбаков (для точек/приманок и LLM)
+        if (
+            day >= REPORT_START
+            and (author or "") not in ADMIN_AUTHORS
+            and FOREL_RX.search(text)
+        ):
+            loc = LOCATION_RX.search(text)
+            lure = LURE_RX.search(text)
             if loc or lure:
                 anchor = loc or lure
-                reports.append({"day": day, "author": author or "",
-                    "location": norm_loc(loc.group(0)) if loc else None,
-                    "lure": norm_lure(lure.group(0)) if lure else None,
-                    "success": bool(SUCCESS_RX.search(text)),
-                    "url": url, "quote": snippet(text, anchor.start(), 110)[:150]})
-            if TIME_HINT_RX.search(text): llm_cands.append((pid, day, text))
-        if (author or "") not in ADMIN_AUTHORS: continue
+                reports.append(
+                    {
+                        "day": day,
+                        "author": author or "",
+                        "location": norm_loc(loc.group(0)) if loc else None,
+                        "lure": norm_lure(lure.group(0)) if lure else None,
+                        "success": bool(SUCCESS_RX.search(text)),
+                        "url": url,
+                        "quote": snippet(text, anchor.start(), 110)[:150],
+                    }
+                )
+            if TIME_HINT_RX.search(text):
+                llm_cands.append((pid, day, text))
+
+        # Ниже — только админы (запуски/баланс)
+        if (author or "") not in ADMIN_AUTHORS:
+            continue
+
+        # Отсекаем сильно «старые» события до BALANCE_START
         if day < BALANCE_START:
             try:
-                if (date.fromisoformat(BALANCE_START) - date.fromisoformat(day)).days > 10: continue
-            except Exception: continue
+                if (
+                    date.fromisoformat(BALANCE_START) - date.fromisoformat(day)
+                ).days > 10:
+                    continue
+            except Exception:
+                continue
+
+        # Парсим события запуск/вылов
         for ev in find_events(text, dt):
             d = ev["day"]
-            if not d or d < BALANCE_START: continue
-            if ev["kind"] == "stock" and d in IGNORE_STOCK_DAYS: continue
-            rec = {"kg": ev["kg"], "url": url, "dt": dt, "pos": ev["pos"],
-                   "is_fact": (dt[:10] == d),
-                   "quote": ("пост " + dt[5:10] + " " + dt[11:16] + " " + ev["quote"])[:150]}
-            if ev["kind"] == "stock": stock_c[d].append(rec)
-            else: catch_c[d].append(rec)
+            if not d or d < BALANCE_START:
+                continue
+
+            # Не учитываем будущие (анонсированные) даты в балансе
+            if d > str(date.today()):
+                continue
+
+            if ev["kind"] == "stock" and d in IGNORE_STOCK_DAYS:
+                continue
+
+            rec = {
+                "kg": ev["kg"],
+                "url": url,
+                "dt": dt,
+                "pos": ev["pos"],
+                "is_fact": (dt[:10] == d),
+                "quote": (
+                    "пост " + dt[5:10] + " " + dt[11:16] + " " + ev["quote"]
+                )[:150],
+            }
+
+            if ev["kind"] == "stock":
+                stock_c[d].append(rec)
+            else:
+                catch_c[d].append(rec)
+
+    # По одному «лучшему» запуску/вылову в день
     day_events = {}
     for d, recs in stock_c.items():
         pool = [r for r in recs if r["is_fact"]] or recs
-        day_events.setdefault(d, {})["stock"] = max(pool, key=lambda r: (r["dt"], r["pos"]))
+        day_events.setdefault(d, {})["stock"] = max(
+            pool, key=lambda r: (r["dt"], r["pos"])
+        )
     for d, recs in catch_c.items():
-        day_events.setdefault(d, {})["catch"] = max(recs, key=lambda r: (r["dt"], r["pos"]))
+        day_events.setdefault(d, {})["catch"] = max(
+            recs, key=lambda r: (r["dt"], r["pos"])
+        )
+
+    # Погода
     weather = load_weather()
+
+    # LLM-анализ
     llm_cands.sort(key=lambda c: c[1], reverse=True)
     agg, analyzed = run_llm(db, llm_cands)
-    llm_time = {"enabled": bool(LLM_API_KEY), "analyzed": analyzed, "labels": TIME_PERIODS,
-                "bite": [agg[p]["bite"] for p in TIME_PERIODS],
-                "no_bite": [agg[p]["no_bite"] for p in TIME_PERIODS]}
-    moon_b = defaultdict(list); monthly = defaultdict(list)
+    llm_time = {
+        "enabled": bool(LLM_API_KEY),
+        "analyzed": analyzed,
+        "labels": TIME_PERIODS,
+        "bite": [agg[p]["bite"] for p in TIME_PERIODS],
+        "no_bite": [agg[p]["no_bite"] for p in TIME_PERIODS],
+    }
+
+    # Луна, месяцы, давление
+    moon_b = defaultdict(list)
+    monthly = defaultdict(list)
     press_g = {"ниже 745": [], "745-760": [], "выше 760": []}
+
     for d, urls in days.items():
         monthly[d[:7]].append(len(urls))
         ph = moon_phase(d)
-        if ph: moon_b[ph].append(len(urls))
+        if ph:
+            moon_b[ph].append(len(urls))
         pr = (weather.get(d) or {}).get("pressure")
         if pr is not None:
             g = "ниже 745" if pr < 745 else ("745-760" if pr <= 760 else "выше 760")
             press_g[g].append(len(urls))
-    def avg(v): return round(sum(v) / len(v), 2) if v else 0
+
+    def avg(v):
+        return round(sum(v) / len(v), 2) if v else 0
+
     moon_labels = [p for p in MOON_ORDER if p in moon_b]
-    moon_stats = {"labels": moon_labels, "values": [avg(moon_b[p]) for p in moon_labels],
-                  "days": [len(moon_b[p]) for p in moon_labels]}
+    moon_stats = {
+        "labels": moon_labels,
+        "values": [avg(moon_b[p]) for p in moon_labels],
+        "days": [len(moon_b[p]) for p in moon_labels],
+    }
+
     collected = len([f for f in os.listdir(PAGES_DIR) if f.endswith(".json")])
-    need = max(1, state.get("newest", last_page) - state.get("start_page", last_page) + 1)
-    stats = {"monthly": dict((k, avg(v)) for k, v in sorted(monthly.items())),
-             "pressure": dict((k, avg(v)) for k, v in press_g.items()),
-             "total_posts": sum(len(v) for v in days.values()), "active_days": len(days),
-             "collected": collected, "need": need, "pct": round(collected / need * 100, 1),
-             "updated": str(date.today())}
+    need = max(
+        1, state.get("newest", last_page) - state.get("start_page", last_page) + 1
+    )
+
+    stats = {
+        "monthly": dict((k, avg(v)) for k, v in sorted(monthly.items())),
+        "pressure": dict((k, avg(v)) for k, v in press_g.items()),
+        "total_posts": sum(len(v) for v in days.values()),
+        "active_days": len(days),
+        "collected": collected,
+        "need": need,
+        "pct": round(collected / need * 100, 1),
+        "updated": str(date.today()),
+    }
+
+    # Таблица последних активных дней
     table = []
     for d in sorted(days, reverse=True)[:60]:
-        w = weather.get(d) or {}; wind = None
+        w = weather.get(d) or {}
+        wind = None
         if w.get("wind_speed") is not None:
             wind = (w.get("wind_dir") or "?") + " " + str(w["wind_speed"]) + " м/с"
-        table.append({"day": d, "posts": len(days[d]), "t_day": w.get("t_day"),
-                      "t_night": w.get("t_night"), "wind": wind, "pressure": w.get("pressure"),
-                      "precip": w.get("precip"), "moon": moon_phase(d), "links": days[d][:5]})
-    dates, st_l, ct_l, rm_l = [], [], [], []; total_st = total_ct = 0; last_stock = None
+        table.append(
+            {
+                "day": d,
+                "posts": len(days[d]),
+                "t_day": w.get("t_day"),
+                "t_night": w.get("t_night"),
+                "wind": wind,
+                "pressure": w.get("pressure"),
+                "precip": w.get("precip"),
+                "moon": moon_phase(d),
+                "links": days[d][:5],
+            }
+        )
+
+    # Ряд баланса по дням: только до сегодняшнего дня
+    dates, st_l, ct_l, rm_l = [], [], [], []
+    total_st = total_ct = 0
+    last_stock = None
+
     if day_events:
-        cur = date.fromisoformat(min(day_events))
-        end = date.fromisoformat(max(max(day_events), str(date.today())))
+        cur = date.fromisoformat(min(day_events))  # первый день с событием
         rem = 0
-        while cur <= end:
-            ds = str(cur); ev = day_events.get(ds, {})
-            s = ev.get("stock", {}).get("kg", 0); c = ev.get("catch", {}).get("kg", 0)
-            total_st += s; total_ct += c; rem = max(0, rem + s - c)
-            if s: last_stock = ds
-            dates.append(ds); st_l.append(s); ct_l.append(c); rm_l.append(rem)
+        today_obj = date.today()
+
+        # Идём от первого события до сегодняшней даты включительно
+        while cur <= today_obj:
+            ds = str(cur)
+            ev = day_events.get(ds, {})
+            s = ev.get("stock", {}).get("kg", 0)
+            c = ev.get("catch", {}).get("kg", 0)
+
+            total_st += s
+            total_ct += c
+
+            # ВАЖНО: честный net, без max(0, ...)
+            rem = rem + s - c
+
+            if s:
+                last_stock = ds
+
+            dates.append(ds)
+            st_l.append(s)
+            ct_l.append(c)
+            rm_l.append(rem)
+
             cur += timedelta(days=1)
+
+    # Журнал запусков/выловов (может включать будущие даты — как анонсы)
     events = []
     for d in sorted(day_events, reverse=True)[:40]:
         for k in ("stock", "catch"):
             if k in day_events[d]:
                 e = day_events[d][k]
-                events.append({"day": d,
-                    "type": "запуск" if k == "stock" else "вылов",
-                    "kg": e["kg"], "url": e["url"], "quote": e["quote"]})
+                events.append(
+                    {
+                        "day": d,
+                        "type": "запуск" if k == "stock" else "вылов",
+                        "kg": e["kg"],
+                        "url": e["url"],
+                        "quote": e["quote"],
+                    }
+                )
+
+    # Топ локаций и приманок
     reports.sort(key=lambda r: r["day"], reverse=True)
-    tl = defaultdict(int); tu = defaultdict(int)
+    tl = defaultdict(int)
+    tu = defaultdict(int)
     for r in reports:
-        if r["location"]: tl[norm_loc(r["location"])] += 1
-        if r["lure"]: tu[norm_lure(r["lure"])] += 1
+        if r["location"]:
+            tl[norm_loc(r["location"])] += 1
+        if r["lure"]:
+            tu[norm_lure(r["lure"])] += 1
+
     cw = weather.get(str(date.today())) or {}
-    balance = {"start": BALANCE_START, "total_stocked": total_st, "total_caught": total_ct,
-               "remaining": rm_l[-1] if rm_l else 0,
-               "days_since_stock": (date.today() - date.fromisoformat(last_stock)).days if last_stock else None,
-               "series": {"dates": dates, "stocked": st_l, "caught": ct_l, "remaining": rm_l},
-               "events": events}
-    payload = json.dumps({"stats": stats, "table": table, "balance": balance,
-        "current_weather": {"temp": cw.get("t_day"), "pressure": cw.get("pressure"),
-                            "precip": cw.get("precip"), "moon": moon_phase(str(date.today()))},
-        "llm_time": llm_time, "moon_stats": moon_stats, "reports": reports[:80],
-        "top_locations": dict(sorted(tl.items(), key=lambda x: -x[1])[:12]),
-        "top_lures": dict(sorted(tu.items(), key=lambda x: -x[1])[:12])},
-        ensure_ascii=False).replace("</", "<\\/")
+
+    balance = {
+        "start": BALANCE_START,
+        "total_stocked": total_st,
+        "total_caught": total_ct,
+        # Остаток может быть отрицательным — это честный net (запуск - вылов)
+        "remaining": rm_l[-1] if rm_l else 0,
+        "days_since_stock": (
+            (date.today() - date.fromisoformat(last_stock)).days if last_stock else None
+        ),
+        "series": {
+            "dates": dates,
+            "stocked": st_l,
+            "caught": ct_l,
+            "remaining": rm_l,
+        },
+        "events": events,
+    }
+
+    payload = json.dumps(
+        {
+            "stats": stats,
+            "table": table,
+            "balance": balance,
+            "current_weather": {
+                "temp": cw.get("t_day"),
+                "pressure": cw.get("pressure"),
+                "precip": cw.get("precip"),
+                "moon": moon_phase(str(date.today())),
+            },
+            "llm_time": llm_time,
+            "moon_stats": moon_stats,
+            "reports": reports[:80],
+            "top_locations": dict(
+                sorted(tl.items(), key=lambda x: -x[1])[:12]
+            ),
+            "top_lures": dict(
+                sorted(tu.items(), key=lambda x: -x[1])[:12]
+            ),
+        },
+        ensure_ascii=False,
+    ).replace("</", "<\\/")
+
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(TEMPLATE.replace("__DATA__", payload))
-    print("Sait sobran. Ostatok " + str(balance["remaining"]) + " kg, otchetov " + str(len(reports)) + ", LLM " + str(analyzed))
+
+    print(
+        "Sait sobran. Ostatok "
+        + str(balance["remaining"])
+        + " kg, otchetov "
+        + str(len(reports))
+        + ", LLM "
+        + str(analyzed)
+    )
 
 def main():
     os.makedirs(PAGES_DIR, exist_ok=True)
