@@ -494,13 +494,10 @@ def find_events(text, post_dt):
             if not FOREL_RX.search(ctx) and OTHER_FISH.search(ctx): continue
             ed, dated = resolve_event_date(text, s, e, post_dt)
             if not dated:
-                # Смотрим, что написано перед цифрой: «завтра» или «сегодня».
                 pre = text[max(0, s - 70):s].lower()
                 pos_z = pre.rfind("завтра")
                 pos_s = pre.rfind("сегодня")
                 if pos_z != -1 and pos_z > pos_s:
-                    # Анонс на завтра: датируем завтрашним днём.
-                    # Сегодня в баланс он не попадёт (d > today), учтётся завтра.
                     try:
                         ed = str(date.fromisoformat(pd) + timedelta(days=1))
                         dated = True
@@ -616,7 +613,6 @@ def build(db, state, last_page):
     reports = []
     llm_cands = []
 
-    # Разбор всех постов
     for pid, page, author, dt, text in db.execute(
         "SELECT post_id, page, author, post_dt, text FROM posts"
     ):
@@ -624,14 +620,12 @@ def build(db, state, last_page):
         url = THREAD + "/page-" + str(page) + "#post-" + str(pid)
         text = text or ""
 
-        # Посты про форель для общей статистики
         if day and day >= START_DATE and FOREL_RX.search(text):
             days[day].append(url)
 
         if not day:
             continue
 
-        # Отчёты обычных рыбаков (для точек/приманок и LLM)
         if (
             day >= REPORT_START
             and (author or "") not in ADMIN_AUTHORS
@@ -655,11 +649,9 @@ def build(db, state, last_page):
             if TIME_HINT_RX.search(text):
                 llm_cands.append((pid, day, text))
 
-        # Ниже — только админы (запуски/баланс)
         if (author or "") not in ADMIN_AUTHORS:
             continue
 
-        # Отсекаем сильно «старые» события до BALANCE_START
         if day < BALANCE_START:
             try:
                 if (
@@ -669,14 +661,11 @@ def build(db, state, last_page):
             except Exception:
                 continue
 
-        # Парсим события запуск/вылов
         for ev in find_events(text, dt):
             d = ev["day"]
             if not d or d < BALANCE_START:
                 continue
 
-            # Не учитываем будущие (анонсированные) даты в балансе:
-            # анонс «на завтра» сюда и попадает, сегодня он в расчёт не идёт
             if d > str(date.today()):
                 continue
 
@@ -699,7 +688,6 @@ def build(db, state, last_page):
             else:
                 catch_c[d].append(rec)
 
-    # По одному «лучшему» запуску/вылову в день
     day_events = {}
     for d, recs in stock_c.items():
         pool = [r for r in recs if r["is_fact"]] or recs
@@ -711,10 +699,8 @@ def build(db, state, last_page):
             recs, key=lambda r: (r["dt"], r["pos"])
         )
 
-    # Погода
     weather = load_weather()
 
-    # LLM-анализ
     llm_cands.sort(key=lambda c: c[1], reverse=True)
     agg, analyzed = run_llm(db, llm_cands)
     llm_time = {
@@ -725,7 +711,6 @@ def build(db, state, last_page):
         "no_bite": [agg[p]["no_bite"] for p in TIME_PERIODS],
     }
 
-    # Луна, месяцы, давление
     moon_b = defaultdict(list)
     monthly = defaultdict(list)
     press_g = {"ниже 745": [], "745-760": [], "выше 760": []}
@@ -766,7 +751,6 @@ def build(db, state, last_page):
         "updated": str(date.today()),
     }
 
-    # Таблица последних активных дней
     table = []
     for d in sorted(days, reverse=True)[:60]:
         w = weather.get(d) or {}
@@ -787,39 +771,30 @@ def build(db, state, last_page):
             }
         )
 
-    # Ряд баланса по дням: только до сегодняшнего дня
     dates, st_l, ct_l, rm_l = [], [], [], []
     total_st = total_ct = 0
     last_stock = None
 
     if day_events:
-        cur = date.fromisoformat(min(day_events))  # первый день с событием
+        cur = date.fromisoformat(min(day_events))
         rem = 0
         today_obj = date.today()
 
-        # Идём от первого события до сегодняшней даты включительно
         while cur <= today_obj:
             ds = str(cur)
             ev = day_events.get(ds, {})
             s = ev.get("stock", {}).get("kg", 0)
             c = ev.get("catch", {}).get("kg", 0)
 
-            # Сегодняшний запуск в остаток не идём, пока за сегодня нет
-            # отчёта о вылове. Появится вечерний отчёт («вылов X») —
-            # учтём и запуск, и вылов, и остаток станет понятен.
             if cur == today_obj and s and not c:
                 s = 0
 
-            # «Последний запуск» показываем по факту события, даже если
-            # сегодняшний запуск ещё не учтён в остатке.
             if ev.get("stock"):
                 last_stock = ds
 
             total_st += s
             total_ct += c
 
-            # Честный net, без max(0, ...): если вылов больше запуска,
-            # остаток уходит в минус и вычитается из общего остатка.
             rem = rem + s - c
 
             dates.append(ds)
@@ -829,13 +804,11 @@ def build(db, state, last_page):
 
             cur += timedelta(days=1)
 
-    # Сколько кг сегодняшнего запуска ещё не учтено в остатке
     tev = day_events.get(str(date.today()), {}) if day_events else {}
     today_pending_stock = (
         tev["stock"]["kg"] if (tev.get("stock") and not tev.get("catch")) else 0
     )
 
-    # Журнал запусков/выловов
     events = []
     for d in sorted(day_events, reverse=True)[:40]:
         for k in ("stock", "catch"):
@@ -851,7 +824,6 @@ def build(db, state, last_page):
                     }
                 )
 
-    # Топ локаций и приманок
     reports.sort(key=lambda r: r["day"], reverse=True)
     tl = defaultdict(int)
     tu = defaultdict(int)
@@ -867,7 +839,6 @@ def build(db, state, last_page):
         "start": BALANCE_START,
         "total_stocked": total_st,
         "total_caught": total_ct,
-        # Остаток может быть отрицательным — это честный net (запуск - вылов)
         "remaining": rm_l[-1] if rm_l else 0,
         "today_pending_stock": today_pending_stock,
         "days_since_stock": (
