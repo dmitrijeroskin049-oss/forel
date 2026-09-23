@@ -190,7 +190,8 @@ footer{margin-top:20px;text-align:center}
 </div></details>
 <details open><summary>&#x1F41F; Остаток форели в водоёме</summary><div class="card">
 <div class="big" id="rem">-</div>
-<div class="note">запущено <b id="st" style="color:#4ade80">0</b> кг &#8226; выловлено <b id="ct" style="color:#f87171">0</b> кг &#8226; отсчёт с <span id="bs"></span><br>последний запуск: <span id="dsl">-</span> &#8226; обновлено <span id="upd"></span></div>
+<div class="note">запущено <b id="st" style="color:#4ade80">0</b> кг &#8226; выловлено <b id="ct" style="color:#f87171">0</b> кг &#8226; отсчёт с <span id="bs"></span><br>последний запуск: <span id="dsl">-</span> &#8226; обновлено <span id="upd"></span><span id="pend"></span></div>
+<div class="note" style="margin-top:6px">Сегодняшний запуск учитывается в остатке только после отчёта о вылове за день.</div>
 </div></details>
 <details open><summary>&#x1F4CA; Баланс</summary><div class="card" id="balbox"><div class="chartbox"><canvas id="bal"></canvas></div></div></details>
 <details><summary>&#x1F4D3; Журнал запусков и выловов</summary><div class="card">
@@ -244,6 +245,8 @@ document.getElementById('rem').textContent=(B.events&&B.events.length)?('При�
 var dss=B.days_since_stock;
 document.getElementById('dsl').textContent=(dss==null)?'нет данных':(dss<=0?'сегодня':dss+' дн. назад');
 document.getElementById('upd').textContent=(D.stats&&D.stats.updated)||'';
+var tps=B.today_pending_stock||0;
+document.getElementById('pend').textContent=(tps>0)?(' • сегодня запущено '+tps+' кг, в остаток попадёт после отчёта о вылове'):'';
 if(B.series&&B.series.dates&&B.series.dates.length){
 new Chart(document.getElementById('bal'),{data:{labels:B.series.dates,datasets:[
 {type:'line',label:'Остаток, кг',data:B.series.remaining,borderColor:'#fbbf24',backgroundColor:'rgba(251,191,36,.10)',fill:true,pointRadius:0,borderWidth:2,tension:.35},
@@ -490,8 +493,23 @@ def find_events(text, post_dt):
             ctx = text[max(0, s - 250):min(len(text), e + 250)]
             if not FOREL_RX.search(ctx) and OTHER_FISH.search(ctx): continue
             ed, dated = resolve_event_date(text, s, e, post_dt)
-            if not dated and FUTURE_RX.search(text[max(0, s - 60):s].lower()): continue
-        else: ed, dated = pd, False
+            if not dated:
+                # Смотрим, что написано перед цифрой: «завтра» или «сегодня».
+                pre = text[max(0, s - 70):s].lower()
+                pos_z = pre.rfind("завтра")
+                pos_s = pre.rfind("сегодня")
+                if pos_z != -1 and pos_z > pos_s:
+                    # Анонс на завтра: датируем завтрашним днём.
+                    # Сегодня в баланс он не попадёт (d > today), учтётся завтра.
+                    try:
+                        ed = str(date.fromisoformat(pd) + timedelta(days=1))
+                        dated = True
+                    except Exception:
+                        continue
+                elif FUTURE_RX.search(pre):
+                    continue
+        else:
+            ed, dated = pd, False
         out.append({"kind": kind, "kg": kg, "day": ed, "dated": dated,
                     "quote": snippet(text, s), "pos": s})
     dated_stock = [r for r in out if r["kind"] == "stock" and r["dated"]]
@@ -657,7 +675,8 @@ def build(db, state, last_page):
             if not d or d < BALANCE_START:
                 continue
 
-            # Не учитываем будущие (анонсированные) даты в балансе
+            # Не учитываем будущие (анонсированные) даты в балансе:
+            # анонс «на завтра» сюда и попадает, сегодня он в расчёт не идёт
             if d > str(date.today()):
                 continue
 
@@ -785,14 +804,23 @@ def build(db, state, last_page):
             s = ev.get("stock", {}).get("kg", 0)
             c = ev.get("catch", {}).get("kg", 0)
 
+            # Сегодняшний запуск в остаток не идём, пока за сегодня нет
+            # отчёта о вылове. Появится вечерний отчёт («вылов X») —
+            # учтём и запуск, и вылов, и остаток станет понятен.
+            if cur == today_obj and s and not c:
+                s = 0
+
+            # «Последний запуск» показываем по факту события, даже если
+            # сегодняшний запуск ещё не учтён в остатке.
+            if ev.get("stock"):
+                last_stock = ds
+
             total_st += s
             total_ct += c
 
-            # ВАЖНО: честный net, без max(0, ...)
+            # Честный net, без max(0, ...): если вылов больше запуска,
+            # остаток уходит в минус и вычитается из общего остатка.
             rem = rem + s - c
-
-            if s:
-                last_stock = ds
 
             dates.append(ds)
             st_l.append(s)
@@ -801,7 +829,13 @@ def build(db, state, last_page):
 
             cur += timedelta(days=1)
 
-    # Журнал запусков/выловов (может включать будущие даты — как анонсы)
+    # Сколько кг сегодняшнего запуска ещё не учтено в остатке
+    tev = day_events.get(str(date.today()), {}) if day_events else {}
+    today_pending_stock = (
+        tev["stock"]["kg"] if (tev.get("stock") and not tev.get("catch")) else 0
+    )
+
+    # Журнал запусков/выловов
     events = []
     for d in sorted(day_events, reverse=True)[:40]:
         for k in ("stock", "catch"):
@@ -835,6 +869,7 @@ def build(db, state, last_page):
         "total_caught": total_ct,
         # Остаток может быть отрицательным — это честный net (запуск - вылов)
         "remaining": rm_l[-1] if rm_l else 0,
+        "today_pending_stock": today_pending_stock,
         "days_since_stock": (
             (date.today() - date.fromisoformat(last_stock)).days if last_stock else None
         ),
@@ -882,6 +917,12 @@ def build(db, state, last_page):
         + ", LLM "
         + str(analyzed)
     )
+    if today_pending_stock:
+        print(
+            "Segodnyashniy zapusk "
+            + str(today_pending_stock)
+            + " kg otlojen do vechernego otcheta o vylove"
+        )
 
 def main():
     os.makedirs(PAGES_DIR, exist_ok=True)
