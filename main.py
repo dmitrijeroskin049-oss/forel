@@ -14,6 +14,14 @@ START_DATE = "2024-01-01"
 BALANCE_START = "2026-09-09"
 REPORT_START = "2026-09-01"
 
+# ==========================================================================
+# РУЧНЫЕ ПРАВКИ. Если скрипт пропустил запуск или вылов — впиши сюда сам.
+# Формат: "дата": {"stock": кг_запуска, "catch": кг_вылова}
+MANUAL_EVENTS = {
+    # "2026-09-12": {"catch": 146},
+}
+# ==========================================================================
+
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "").strip()
 LLM_API_URL = os.environ.get("LLM_API_URL", "https://openrouter.ai/api/v1/chat/completions").strip()
 LLM_MODEL = os.environ.get("LLM_MODEL", "meta-llama/llama-3.3-70b-instruct:free").strip()
@@ -36,7 +44,6 @@ OTHER_FISH = re.compile(r"осет|карп|сом\b|щук|белуг|стер�
 DATE_RX = re.compile(r"(?<!\d)(\d{1,2})\.(\d{2})(?:\.(\d{2,4}))?(?!\d)")
 KG_RX = re.compile(r"(\d+(?:[.,]\d+)?)(?:\s*[-]\s*(\d+(?:[.,]\d+)?))?\s*(кг|килограмм\w*|тонн\w*|т)?\b", re.I)
 STOCK_KW_RX = re.compile(r"запуск|запустили|зарыбление|зарыбили|завезли|завоз|выпустили", re.I)
-# ИСПРАВЛЕНО: добавлено «улов» и «поймано», чтобы не пропускать сообщения администраторов
 CATCH_KW_RX = re.compile(r"вылов\w*|улов\w*|итог дня|итого|поймано", re.I)
 FUTURE_RX = re.compile(r"сделаем|будет|будут|планиру|анонс|ожидается|собираемся", re.I)
 BALANCE_KW_RX = re.compile(r"подушк\w*|накоплени", re.I)
@@ -478,7 +485,19 @@ def find_events(text, post_dt):
         before = text[max(0, s - 45):s].lower()
         if re.search(r"\u043D\u0430\u0432\u0435\u0441\u043A\w*[^0-9]{0,25}$", before): continue
         if OTHER_FISH.search(text[max(0, s - 25):min(len(text), e + 25)]): continue
-        if BALANCE_KW_RX.search(text[max(0, s - 80):s]): continue
+
+        # ИСПРАВЛЕНО: «подушка» блокирует цифру ТОЛЬКО если между словом
+        # «подушка» и цифрой нет слов запуск/вылов.
+        # «Подушка пополнилась. Запуск 463 кг вылов 146 кг» — теперь учитывается!
+        bal_zone = text[max(0, s - 80):s]
+        bal_hit = None
+        for bm in BALANCE_KW_RX.finditer(bal_zone):
+            bal_hit = bm
+        if bal_hit:
+            between_bal = bal_zone[bal_hit.end():]
+            if not (STOCK_KW_RX.search(between_bal) or CATCH_KW_RX.search(between_bal)):
+                continue
+
         kind = kind_for(text, kws, s, e)
         if kind is None: continue
         try:
@@ -508,6 +527,13 @@ def find_events(text, post_dt):
                     continue
         else:
             ed, dated = pd, False
+            pre = text[max(0, s - 80):s].lower()
+            if "вчера" in pre:
+                try:
+                    ed = str(date.fromisoformat(pd) - timedelta(days=1))
+                    dated = True
+                except Exception:
+                    pass
         out.append({"kind": kind, "kg": kg, "day": ed, "dated": dated,
                     "quote": snippet(text, s), "pos": s})
     dated_stock = [r for r in out if r["kind"] == "stock" and r["dated"]]
@@ -699,6 +725,32 @@ def build(db, state, last_page):
         day_events.setdefault(d, {})["catch"] = max(
             recs, key=lambda r: (r["dt"], r["pos"])
         )
+
+    # Ручные правки — всегда побеждают найденное на форуме
+    for md, vals in MANUAL_EVENTS.items():
+        for kk in ("stock", "catch"):
+            if kk in vals and vals[kk]:
+                day_events.setdefault(md, {})[kk] = {
+                    "kg": int(vals[kk]),
+                    "url": THREAD,
+                    "dt": md + "T23:59",
+                    "pos": 0,
+                    "is_fact": True,
+                    "quote": "ручная правка (вписано в MANUAL_EVENTS)",
+                }
+
+    # Предупреждение: дни с запуском, но без вылова
+    for d in sorted(day_events):
+        if (
+            "stock" in day_events[d]
+            and "catch" not in day_events[d]
+            and d != str(date.today())
+        ):
+            print(
+                "VNIMANIE: za "
+                + d
+                + " est zapusk, no NET vylova. Prover forum ili vpishi v MANUAL_EVENTS"
+            )
 
     weather = load_weather()
 
