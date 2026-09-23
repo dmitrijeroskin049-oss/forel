@@ -11,7 +11,7 @@ STATE_FILE = f"state_{THREAD_ID}.json"
 DB_FILE = f"fishing_{THREAD_ID}.db"
 
 START_DATE = "2024-01-01"
-BALANCE_START = "2026-09-01"
+BALANCE_START = "2026-09-09"
 REPORT_START = "2026-09-01"
 
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "").strip()
