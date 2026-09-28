@@ -15,10 +15,10 @@ BALANCE_START = "2026-09-09"
 REPORT_START = "2026-09-01"
 
 # ==========================================================================
-# РУЧНЫЕ ПРАВКИ. Если скрипт пропустил запуск или вылов — впиши сюда сам.
+# РУЧНЫЕ ПРАВКИ — имеют высший приоритет, перекрывают всё найденное парсером.
 # Формат: "дата": {"stock": кг_запуска, "catch": кг_вылова}
 MANUAL_EVENTS = {
-    # "2026-09-27": {"catch": 312},   # раскомментируй, если парсер не подхватит сам
+    "2026-09-27": {"catch": 312},
 }
 # ==========================================================================
 
@@ -54,13 +54,14 @@ TIME_HINT_RX = re.compile(r"утр|днём|днем|вечер|ноч|расс�
 BAD_BETWEEN_RX = re.compile(r"корм|прикорм|пеллет|смес", re.I)
 SENTENCE_RX = re.compile(r"[.!?]")
 
-# --- НОВЫЕ регулярки для отсечения агрегатов за период и приоритета "за сегодня" ---
+# --- Регулярка агрегатов за период ("за прошедшую неделю", "итого за", "в сумме за") ---
 PERIOD_AGG_RX = re.compile(
     r"за\s+(прошедш\w*|прошл\w*|минувш\w*|эт\w*)\s*"
     r"(недел\w*|месяц\w*|сутк\w*|дн\w*|период\w*)|"
     r"итого\s+за|в\s+сумме\s+за|всего\s+за",
     re.I
 )
+# --- "за сегодня" — приоритетный маркер ---
 TODAY_RX = re.compile(r"за\s+сегодня|сегодня\s+(вылов|улов|поймано)", re.I)
 
 WIND_DIRS = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
@@ -483,8 +484,8 @@ def kind_for(text, kws, start, end):
 
 
 def find_events(text, post_dt):
-    """Исправленная версия: отсекает агрегаты 'за прошедшую неделю',
-    отдаёт приоритет 'за сегодня'."""
+    """Агрегаты 'за прошедшую неделю' полностью игнорируются.
+    'За сегодня' имеет приоритет."""
     if not text:
         return []
     pd = (post_dt or "")[:10]
@@ -494,6 +495,21 @@ def find_events(text, post_dt):
     for m in CATCH_KW_RX.finditer(text):
         kws.append((m.start(), m.end(), "catch"))
     kws.sort()
+
+    # Находим предложения про период (неделя/месяц/итого) и запоминаем их целиком
+    period_spans = []
+    for pm in re.finditer(
+        r"[^.!?\n]*?(за\s+(прошедш\w*|прошл\w*|минувш\w*|эт\w*)\s*"
+        r"(недел\w*|месяц\w*|сутк\w*|период\w*)|итого\s+за|в\s+сумме\s+за|всего\s+за)[^.!?\n]*",
+        text, re.I
+    ):
+        period_spans.append((pm.start(), pm.end()))
+
+    def in_period(pos):
+        for a, b in period_spans:
+            if a <= pos < b:
+                return True
+        return False
 
     today_positions = [m.start() for m in TODAY_RX.finditer(text)]
 
@@ -506,16 +522,15 @@ def find_events(text, post_dt):
         if OTHER_FISH.search(text[max(0, s - 25):min(len(text), e + 25)]):
             continue
 
-        # --- Отсекаем агрегаты "за прошедшую неделю" / "итого за" / "в сумме за" ---
-        agg_zone = text[max(0, s - 90):s]
-        if PERIOD_AGG_RX.search(agg_zone):
+        # Жёстко игнорируем любые числа внутри предложений про период
+        if in_period(s):
             if not today_positions:
                 continue
             nearest_today = min((abs(s - tp) for tp in today_positions), default=10**9)
-            if nearest_today > 60:
+            if nearest_today > 50:
                 continue
 
-        # --- Проверка "подушки": блокируем только если рядом нет запуск/вылов ---
+        # Проверка "подушки" (только если между ней и цифрой нет запуск/вылов)
         bal_zone = text[max(0, s - 80):s]
         bal_hit = None
         for bm in BALANCE_KW_RX.finditer(bal_zone):
@@ -761,6 +776,12 @@ def build(db, state, last_page):
 
             if ev["kind"] == "stock" and d in IGNORE_STOCK_DAYS:
                 continue
+
+            # Дополнительная защита: если запуск >= 1500 кг, проверяем — может, это агрегат за период
+            if ev["kind"] == "stock" and ev["kg"] >= 1500:
+                ctx = text[max(0, ev["pos"] - 200):ev["pos"]]
+                if PERIOD_AGG_RX.search(ctx):
+                    continue
 
             rec = {
                 "kg": ev["kg"],
