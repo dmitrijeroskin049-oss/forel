@@ -23,8 +23,9 @@ jobs:
       - name: Build site
         env:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-          LLM_MODEL: "meta-llama/llama-3.3-70b-instruct:free"
-          LLM_MAX_POSTS: "20"
+          LLM_API_URL: "https://openrouter.ai/api/v1/chat/completions"
+          LLM_MODEL: "deepseek/deepseek-chat-v3.1:free"
+          LLM_MAX_POSTS: "50"
         run: python main.py
 
       - name: Commit results
