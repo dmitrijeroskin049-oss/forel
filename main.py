@@ -18,7 +18,7 @@ REPORT_START = "2026-09-01"
 # РУЧНЫЕ ПРАВКИ. Если скрипт пропустил запуск или вылов — впиши сюда сам.
 # Формат: "дата": {"stock": кг_запуска, "catch": кг_вылова}
 MANUAL_EVENTS = {
-    # "2026-09-12": {"catch": 146},
+    # "2026-09-27": {"catch": 312},   # раскомментируй, если парсер не подхватит сам
 }
 # ==========================================================================
 
@@ -53,6 +53,15 @@ SUCCESS_RX = re.compile(r"поймал|словил|взял|вытащил|вы
 TIME_HINT_RX = re.compile(r"утр|днём|днем|вечер|ноч|рассвет|закат|клев|клёв", re.I)
 BAD_BETWEEN_RX = re.compile(r"корм|прикорм|пеллет|смес", re.I)
 SENTENCE_RX = re.compile(r"[.!?]")
+
+# --- НОВЫЕ регулярки для отсечения агрегатов за период и приоритета "за сегодня" ---
+PERIOD_AGG_RX = re.compile(
+    r"за\s+(прошедш\w*|прошл\w*|минувш\w*|эт\w*)\s*"
+    r"(недел\w*|месяц\w*|сутк\w*|дн\w*|период\w*)|"
+    r"итого\s+за|в\s+сумме\s+за|всего\s+за",
+    re.I
+)
+TODAY_RX = re.compile(r"за\s+сегодня|сегодня\s+(вылов|улов|поймано)", re.I)
 
 WIND_DIRS = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
 MOON_ORDER = ["новолуние", "растущий серп", "первая четверть", "растущая", "полнолуние", "убывающая", "последняя четверть", "убывающий серп"]
@@ -472,23 +481,41 @@ def kind_for(text, kws, start, end):
         if ks - end <= 200 and not SENTENCE_RX.search(between) and not BAD_BETWEEN_RX.search(between): return kind
     return None
 
+
 def find_events(text, post_dt):
-    if not text: return []
+    """Исправленная версия: отсекает агрегаты 'за прошедшую неделю',
+    отдаёт приоритет 'за сегодня'."""
+    if not text:
+        return []
     pd = (post_dt or "")[:10]
     kws = []
-    for m in STOCK_KW_RX.finditer(text): kws.append((m.start(), m.end(), "stock"))
-    for m in CATCH_KW_RX.finditer(text): kws.append((m.start(), m.end(), "catch"))
+    for m in STOCK_KW_RX.finditer(text):
+        kws.append((m.start(), m.end(), "stock"))
+    for m in CATCH_KW_RX.finditer(text):
+        kws.append((m.start(), m.end(), "catch"))
     kws.sort()
+
+    today_positions = [m.start() for m in TODAY_RX.finditer(text)]
+
     out = []
     for m in KG_RX.finditer(text):
         s, e = m.span()
         before = text[max(0, s - 45):s].lower()
-        if re.search(r"\u043D\u0430\u0432\u0435\u0441\u043A\w*[^0-9]{0,25}$", before): continue
-        if OTHER_FISH.search(text[max(0, s - 25):min(len(text), e + 25)]): continue
+        if re.search(r"навеск\w*[^0-9]{0,25}$", before):
+            continue
+        if OTHER_FISH.search(text[max(0, s - 25):min(len(text), e + 25)]):
+            continue
 
-        # ИСПРАВЛЕНО: «подушка» блокирует цифру ТОЛЬКО если между словом
-        # «подушка» и цифрой нет слов запуск/вылов.
-        # «Подушка пополнилась. Запуск 463 кг вылов 146 кг» — теперь учитывается!
+        # --- Отсекаем агрегаты "за прошедшую неделю" / "итого за" / "в сумме за" ---
+        agg_zone = text[max(0, s - 90):s]
+        if PERIOD_AGG_RX.search(agg_zone):
+            if not today_positions:
+                continue
+            nearest_today = min((abs(s - tp) for tp in today_positions), default=10**9)
+            if nearest_today > 60:
+                continue
+
+        # --- Проверка "подушки": блокируем только если рядом нет запуск/вылов ---
         bal_zone = text[max(0, s - 80):s]
         bal_hit = None
         for bm in BALANCE_KW_RX.finditer(bal_zone):
@@ -499,19 +526,29 @@ def find_events(text, post_dt):
                 continue
 
         kind = kind_for(text, kws, s, e)
-        if kind is None: continue
+        if kind is None:
+            continue
         try:
-            v1 = float(m.group(1).replace(",", ".")); v2 = m.group(2)
+            v1 = float(m.group(1).replace(",", "."))
+            v2 = m.group(2)
             val = (v1 + float(v2.replace(",", "."))) / 2 if v2 else v1
             unit = (m.group(3) or "").lower()
-            if unit.startswith("тон") or unit == "т": val *= 1000
+            if unit.startswith("тон") or unit == "т":
+                val *= 1000
             kg = int(round(val))
-        except Exception: continue
-        if kind == "stock" and not (30 <= kg <= 20000): continue
-        if kind == "catch" and not (5 <= kg <= 20000): continue
+        except Exception:
+            continue
+        if kind == "stock" and not (30 <= kg <= 20000):
+            continue
+        if kind == "catch" and not (5 <= kg <= 20000):
+            continue
+
+        is_today = any(abs(s - tp) <= 40 for tp in today_positions)
+
         if kind == "stock":
             ctx = text[max(0, s - 250):min(len(text), e + 250)]
-            if not FOREL_RX.search(ctx) and OTHER_FISH.search(ctx): continue
+            if not FOREL_RX.search(ctx) and OTHER_FISH.search(ctx):
+                continue
             ed, dated = resolve_event_date(text, s, e, post_dt)
             if not dated:
                 pre = text[max(0, s - 70):s].lower()
@@ -528,18 +565,44 @@ def find_events(text, post_dt):
         else:
             ed, dated = pd, False
             pre = text[max(0, s - 80):s].lower()
-            if "вчера" in pre:
+            if "вчера" in pre and not is_today:
                 try:
                     ed = str(date.fromisoformat(pd) - timedelta(days=1))
                     dated = True
                 except Exception:
                     pass
-        out.append({"kind": kind, "kg": kg, "day": ed, "dated": dated,
-                    "quote": snippet(text, s), "pos": s})
+
+        out.append({
+            "kind": kind,
+            "kg": kg,
+            "day": ed,
+            "dated": dated,
+            "is_today": is_today,
+            "quote": snippet(text, s),
+            "pos": s,
+        })
+
     dated_stock = [r for r in out if r["kind"] == "stock" and r["dated"]]
     if dated_stock:
         out = [r for r in out if not (r["kind"] == "stock" and not r["dated"])]
-    return out
+
+    # Среди catch за один день выбираем "за сегодня", если есть
+    catch_by_day = {}
+    others = []
+    for r in out:
+        if r["kind"] == "catch":
+            catch_by_day.setdefault(r["day"], []).append(r)
+        else:
+            others.append(r)
+
+    result = list(others)
+    for d, recs in catch_by_day.items():
+        todays = [r for r in recs if r["is_today"]]
+        pool = todays if todays else recs
+        pool.sort(key=lambda r: r["pos"])
+        result.append(pool[-1] if len(pool) == 1 else pool[0])
+    return result
+
 
 def load_weather():
     w = {}
@@ -705,6 +768,7 @@ def build(db, state, last_page):
                 "dt": dt,
                 "pos": ev["pos"],
                 "is_fact": (dt[:10] == d),
+                "is_today": ev.get("is_today", False),
                 "quote": (
                     "пост " + dt[5:10] + " " + dt[11:16] + " " + ev["quote"]
                 )[:150],
@@ -718,12 +782,16 @@ def build(db, state, last_page):
     day_events = {}
     for d, recs in stock_c.items():
         pool = [r for r in recs if r["is_fact"]] or recs
+        today_recs = [r for r in pool if r.get("is_today")]
+        pick = (today_recs or pool)
         day_events.setdefault(d, {})["stock"] = max(
-            pool, key=lambda r: (r["dt"], r["pos"])
+            pick, key=lambda r: (r["dt"], r["pos"])
         )
     for d, recs in catch_c.items():
+        today_recs = [r for r in recs if r.get("is_today")]
+        pick = today_recs or recs
         day_events.setdefault(d, {})["catch"] = max(
-            recs, key=lambda r: (r["dt"], r["pos"])
+            pick, key=lambda r: (r["dt"], r["pos"])
         )
 
     # Ручные правки — всегда побеждают найденное на форуме
@@ -734,8 +802,9 @@ def build(db, state, last_page):
                     "kg": int(vals[kk]),
                     "url": THREAD,
                     "dt": md + "T23:59",
-                    "pos": 0,
+                    "pos": 10**9,
                     "is_fact": True,
+                    "is_today": False,
                     "quote": "ручная правка (вписано в MANUAL_EVENTS)",
                 }
 
