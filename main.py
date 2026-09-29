@@ -54,14 +54,12 @@ TIME_HINT_RX = re.compile(r"утр|днём|днем|вечер|ноч|расс�
 BAD_BETWEEN_RX = re.compile(r"корм|прикорм|пеллет|смес", re.I)
 SENTENCE_RX = re.compile(r"[.!?]")
 
-# Регулярка агрегатов за период ("за прошедшую неделю", "итого за", "в сумме за")
 PERIOD_AGG_RX = re.compile(
     r"за\s+(прошедш\w*|прошл\w*|минувш\w*|эт\w*)\s*"
     r"(недел\w*|месяц\w*|сутк\w*|дн\w*|период\w*)|"
     r"итого\s+за|в\s+сумме\s+за|всего\s+за",
     re.I
 )
-# "за сегодня" — приоритетный маркер
 TODAY_RX = re.compile(r"за\s+сегодня|сегодня\s+(вылов|улов|поймано)", re.I)
 
 WIND_DIRS = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
@@ -322,17 +320,36 @@ return '<tr><td style="white-space:nowrap">'+r.day+'</td><td>'+st+'</td><td><b>'
 def page_url(p):
     return THREAD if p == 1 else THREAD + "/page-" + str(p)
 
-def fetch(url, tries=3):
+
+# ==========================================================================
+# ИСПРАВЛЕНО: fetch теперь делает 5 попыток, таймаут 60 сек,
+# эмулирует свежий Chrome и передаёт полные браузерные заголовки.
+# Печатает отладочный вывод: статус ответа и длину HTML.
+# ==========================================================================
+def fetch(url, tries=5):
+    headers = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": "https://www.rusfishing.ru/",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+    }
     for a in range(tries):
         try:
-            r = requests.get(url, impersonate="chrome120", timeout=25,
-                             headers={"Accept-Language": "ru-RU,ru;q=0.9"})
-            if r.status_code == 200 and "article" in r.text:
+            r = requests.get(url, impersonate="chrome124", timeout=60,
+                             headers=headers)
+            print("  fetch", url, "-> status", r.status_code, "len", len(r.text))
+            if r.status_code == 200 and ("article" in r.text or "bbWrapper" in r.text):
                 return r.text
+            elif r.status_code == 200:
+                print("     нет article/bbWrapper. Первые 300 символов:")
+                print("     " + r.text[:300].replace("\n", " "))
         except Exception as e:
-            print("retry", a + 1, e)
-        time.sleep(3 * (a + 1))
+            print("  retry", a + 1, "err:", type(e).__name__, str(e)[:200])
+        time.sleep(5 * (a + 1))
     return None
+
 
 def parse_posts(html, page):
     soup = BeautifulSoup(html, "lxml")
@@ -693,7 +710,7 @@ def download(db, state):
             if posts:
                 with open(PAGES_DIR + "/page_%06d.json" % p, "w", encoding="utf-8") as f: json.dump(posts, f, ensure_ascii=False)
                 print(" " + str(i + 1) + "/" + str(len(todo)) + " str." + str(p) + ": " + str(len(posts)))
-        time.sleep(random.uniform(1.2, 2.0))
+        time.sleep(random.uniform(2.0, 3.5))
         if (i + 1) % 20 == 0: save_state(state)
     for fn in os.listdir(PAGES_DIR):
         if not fn.endswith(".json"): continue
