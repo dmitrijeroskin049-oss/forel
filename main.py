@@ -36,8 +36,8 @@ LLM_PROMPT = "Ты анализируешь отчёт рыбака с форе�
 
 ADMIN_AUTHORS = ["Александр SALMO", "Митяй-Митинооо"]
 IGNORE_STOCK_DAYS = {"2026-09-04", "2026-09-05", "2026-09-06", "2026-09-07", "2026-09-08"}
-BATCH = 120
-REFRESH_TAIL = 12
+BATCH = 1500
+REFRESH_TAIL = 3
 
 FOREL_RX = re.compile(r"форел", re.I)
 OTHER_FISH = re.compile(r"осет|карп|сом\b|щук|белуг|стерляд|карас|окун|судак|налим|амур|толстолоб|линь", re.I)
