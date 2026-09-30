@@ -365,11 +365,6 @@ def parse_posts(html, page):
     return out
 
 
-# ==========================================================================
-# ИСПРАВЛЕНО: total_pages теперь ищет "из NNNNN" в тексте страницы —
-# это самый надёжный способ, форум пишет "1 из 10484" в пагинации.
-# Проверка до 100000 страниц (а не 5000, как раньше).
-# ==========================================================================
 def total_pages(html):
     if not html:
         return 1
@@ -429,15 +424,29 @@ def moon_phase(day_str):
     age = ((d - date(2000, 1, 6)).days) % 29.530588853
     return MOON_ORDER[min(7, int(age / 3.6913))]
 
+
+# ==========================================================================
+# ИСПРАВЛЕНО: печатает статус и тело ответа, чтобы видеть реальную ошибку
+# ==========================================================================
 def llm_chat(prompt):
     try:
         r = requests.post(LLM_API_URL,
             headers={"Authorization": "Bearer " + LLM_API_KEY, "Content-Type": "application/json"},
             json={"model": LLM_MODEL, "temperature": 0, "max_tokens": 200,
                   "messages": [{"role": "user", "content": prompt}]}, timeout=90)
-        return r.json()["choices"][0]["message"]["content"]
+        print("     LLM status:", r.status_code, "len:", len(r.text))
+        if r.status_code != 200:
+            print("     LLM error body:", r.text[:500])
+            return None
+        data = r.json()
+        if "choices" not in data:
+            print("     LLM no 'choices'! body:", json.dumps(data, ensure_ascii=False)[:500])
+            return None
+        return data["choices"][0]["message"]["content"]
     except Exception as e:
-        print("LLM error:", e); return None
+        print("LLM exception:", type(e).__name__, str(e)[:300])
+        return None
+
 
 def parse_llm_json(raw):
     if not raw: return None
@@ -520,8 +529,6 @@ def kind_for(text, kws, start, end):
 
 
 def find_events(text, post_dt):
-    """Агрегаты 'за прошедшую неделю' полностью игнорируются.
-    'За сегодня' имеет приоритет."""
     if not text:
         return []
     pd = (post_dt or "")[:10]
@@ -699,6 +706,11 @@ def load_weather():
     except Exception as e: print("forecast weather:", e)
     return w
 
+
+# ==========================================================================
+# ИСПРАВЛЕНО: download теперь заливает в базу ВСЕ папки, начинающиеся с "pages".
+# Это гарантирует, что данные из старой папки "pages" тоже попадут в базу.
+# ==========================================================================
 def download(db, state):
     html = fetch(page_url(1))
     if not html: print("Forum ne otvetil"); return state.get("newest", 1)
@@ -731,19 +743,42 @@ def download(db, state):
                 print(" " + str(i + 1) + "/" + str(len(todo)) + " str." + str(p) + ": " + str(len(posts)))
         time.sleep(random.uniform(2.0, 3.5))
         if (i + 1) % 20 == 0: save_state(state)
-    for fn in os.listdir(PAGES_DIR):
-        if not fn.endswith(".json"): continue
-        try:
-            with open(PAGES_DIR + "/" + fn, encoding="utf-8") as f:
-                for post in json.load(f):
-                    db.execute("INSERT OR REPLACE INTO posts VALUES (?,?,?,?,?)",
-                               (post.get("post_id", ""), post.get("page", 0),
-                                post.get("author", ""), post.get("post_dt", ""), post.get("text", "")))
-            db.commit()
-        except Exception as e: print("file err", fn, e)
+
+    # === ЗАЛИВАЕМ ВСЕ ФАЙЛЫ ИЗ ВСЕХ ПАПОК, НАЧИНАЮЩИХСЯ С "pages" ===
+    all_dirs = [d for d in os.listdir(".") if d.startswith("pages") and os.path.isdir(d)]
+    print("DEBUG: сканирую папки:", all_dirs)
+    total_inserted = 0
+    for d in all_dirs:
+        if not os.path.isdir(d): continue
+        files = [f for f in os.listdir(d) if f.endswith(".json")]
+        print("DEBUG: в", d, "найдено файлов:", len(files))
+        for fn in files:
+            try:
+                with open(d + "/" + fn, encoding="utf-8") as f:
+                    for post in json.load(f):
+                        db.execute("INSERT OR REPLACE INTO posts VALUES (?,?,?,?,?)",
+                                   (post.get("post_id", ""), post.get("page", 0),
+                                    post.get("author", ""), post.get("post_dt", ""), post.get("text", "")))
+                        total_inserted += 1
+                db.commit()
+            except Exception as e:
+                print("file err", d + "/" + fn, e)
+    print("DEBUG: всего записей залито в базу:", total_inserted)
     save_state(state); return last
 
+
 def build(db, state, last_page):
+    # === ОТЛАДКА ===
+    total_posts = db.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
+    pages_on_disk = len([f for f in os.listdir(PAGES_DIR) if f.endswith(".json")])
+    admin_posts = db.execute(
+        "SELECT COUNT(*) FROM posts WHERE author IN (?,?)",
+        ("Александр SALMO", "Митяй-Митинооо")
+    ).fetchone()[0]
+    print("DEBUG: posts in db =", total_posts,
+          "| pages on disk =", pages_on_disk,
+          "| admin posts =", admin_posts)
+
     days = defaultdict(list)
     stock_c = defaultdict(list)
     catch_c = defaultdict(list)
