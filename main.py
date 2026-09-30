@@ -37,7 +37,7 @@ LLM_PROMPT = "Ты анализируешь отчёт рыбака с форе�
 ADMIN_AUTHORS = ["Александр SALMO", "Митяй-Митинооо"]
 IGNORE_STOCK_DAYS = {"2026-09-04", "2026-09-05", "2026-09-06", "2026-09-07", "2026-09-08"}
 BATCH = 1500
-REFRESH_TAIL = 3
+REFRESH_TAIL = 12
 
 FOREL_RX = re.compile(r"форел", re.I)
 OTHER_FISH = re.compile(r"осет|карп|сом\b|щук|белуг|стерляд|карас|окун|судак|налим|амур|толстолоб|линь", re.I)
@@ -425,9 +425,6 @@ def moon_phase(day_str):
     return MOON_ORDER[min(7, int(age / 3.6913))]
 
 
-# ==========================================================================
-# ИСПРАВЛЕНО: печатает статус и тело ответа, чтобы видеть реальную ошибку
-# ==========================================================================
 def llm_chat(prompt):
     try:
         r = requests.post(LLM_API_URL,
@@ -707,49 +704,72 @@ def load_weather():
     return w
 
 
-# ==========================================================================
-# ИСПРАВЛЕНО: download теперь заливает в базу ВСЕ папки, начинающиеся с "pages".
-# Это гарантирует, что данные из старой папки "pages" тоже попадут в базу.
-# ==========================================================================
 def download(db, state):
     html = fetch(page_url(1))
-    if not html: print("Forum ne otvetil"); return state.get("newest", 1)
-    last = total_pages(html); print("Vsego stranic:", last)
+    if not html:
+        print("Forum ne otvetil")
+        return state.get("newest", 1)
+    last = total_pages(html)
+    print("Vsego stranic:", last)
+
     if not state.get("start_page"):
         print("Ischu 2024 god...")
         lo, hi = 1, last
         while lo < hi:
-            mid = (lo + hi) // 2; h = fetch(page_url(mid)); fd = first_date(h) if h else ""
-            print(" str." + str(mid) + ": " + (fd or "?")); time.sleep(1.5)
-            if not fd or fd >= START_DATE: hi = mid
-            else: lo = mid + 1
-        state["start_page"] = max(1, lo - 1); state["cursor"] = last; state["newest"] = last
-    start_page = state["start_page"]; todo = []
-    if last > state.get("newest", last): todo += list(range(state["newest"] + 1, last + 1))
+            mid = (lo + hi) // 2
+            h = fetch(page_url(mid))
+            fd = first_date(h) if h else ""
+            print(" str." + str(mid) + ": " + (fd or "?"))
+            time.sleep(1.5)
+            if not fd or fd >= START_DATE:
+                hi = mid
+            else:
+                lo = mid + 1
+        state["start_page"] = max(1, lo - 1)
+
+    start_page = state["start_page"]
     state["newest"] = last
-    cur = state.get("cursor", last); added = []
-    while len(added) < BATCH and cur >= start_page:
-        if not os.path.exists(PAGES_DIR + "/page_%06d.json" % cur): added.append(cur)
-        cur -= 1
-    state["cursor"] = cur
+
+    # === Собираем ВСЕ пропущенные страницы в диапазоне start_page..last ===
+    have = set()
+    if os.path.isdir(PAGES_DIR):
+        for fn in os.listdir(PAGES_DIR):
+            m = re.match(r"page_(\d+)\.json", fn)
+            if m:
+                have.add(int(m.group(1)))
+    print("DEBUG: уже скачано в", PAGES_DIR, ":", len(have), "файлов")
+
+    needed_all = set(range(start_page, last + 1))
+    missing = sorted(needed_all - have)
+    print("DEBUG: отсутствует страниц в диапазоне:", len(missing))
+
     tail = list(range(max(start_page, last - REFRESH_TAIL + 1), last + 1))
-    todo = sorted(set(todo + added + tail)); print("Zagruzhau " + str(len(todo)) + " stranic")
+    tail_missing = [p for p in tail if p not in have]
+    mid_missing = [p for p in missing if p not in tail_missing]
+
+    todo = tail_missing[:]
+    if len(todo) < BATCH:
+        todo += mid_missing[:BATCH - len(todo)]
+    todo = sorted(set(todo))
+    print("DEBUG: к загрузке:", len(todo), "страниц",
+          "(хвост:", len(tail_missing), ", середина:", len(todo) - len(tail_missing), ")")
+
     for i, p in enumerate(todo):
         h = fetch(page_url(p))
         if h:
             posts = parse_posts(h, p)
             if posts:
-                with open(PAGES_DIR + "/page_%06d.json" % p, "w", encoding="utf-8") as f: json.dump(posts, f, ensure_ascii=False)
+                with open(PAGES_DIR + "/page_%06d.json" % p, "w", encoding="utf-8") as f:
+                    json.dump(posts, f, ensure_ascii=False)
                 print(" " + str(i + 1) + "/" + str(len(todo)) + " str." + str(p) + ": " + str(len(posts)))
-        time.sleep(random.uniform(2.0, 3.5))
-        if (i + 1) % 20 == 0: save_state(state)
+        time.sleep(random.uniform(1.5, 2.5))
+        if (i + 1) % 20 == 0:
+            save_state(state)
 
-    # === ЗАЛИВАЕМ ВСЕ ФАЙЛЫ ИЗ ВСЕХ ПАПОК, НАЧИНАЮЩИХСЯ С "pages" ===
     all_dirs = [d for d in os.listdir(".") if d.startswith("pages") and os.path.isdir(d)]
     print("DEBUG: сканирую папки:", all_dirs)
     total_inserted = 0
     for d in all_dirs:
-        if not os.path.isdir(d): continue
         files = [f for f in os.listdir(d) if f.endswith(".json")]
         print("DEBUG: в", d, "найдено файлов:", len(files))
         for fn in files:
@@ -764,11 +784,11 @@ def download(db, state):
             except Exception as e:
                 print("file err", d + "/" + fn, e)
     print("DEBUG: всего записей залито в базу:", total_inserted)
-    save_state(state); return last
+    save_state(state)
+    return last
 
 
 def build(db, state, last_page):
-    # === ОТЛАДКА ===
     total_posts = db.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
     pages_on_disk = len([f for f in os.listdir(PAGES_DIR) if f.endswith(".json")])
     admin_posts = db.execute(
