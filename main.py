@@ -373,14 +373,20 @@ def total_pages(html):
     soup = BeautifulSoup(html, "lxml")
     nav = soup.select_one(".pageNav")
     if nav and nav.get("data-last"):
-        try: return int(nav["data-last"])
-        except Exception: pass
+        try:
+            n = int(nav["data-last"])
+            if 1 <= n <= 5000:  # защита от мусора
+                return n
+        except Exception:
+            pass
     nums = []
     for a in soup.select(".pageNav a"):
         s = a.get_text(strip=True).replace(" ", "")
-        if s.isdigit(): nums.append(int(s))
+        if s.isdigit():
+            v = int(s)
+            if 1 <= v <= 5000:
+                nums.append(v)
     return max(nums) if nums else 1
-
 def first_date(html):
     if not html: return ""
     soup = BeautifulSoup(html, "lxml")
