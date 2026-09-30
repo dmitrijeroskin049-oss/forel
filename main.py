@@ -321,11 +321,6 @@ def page_url(p):
     return THREAD if p == 1 else THREAD + "/page-" + str(p)
 
 
-# ==========================================================================
-# ИСПРАВЛЕНО: fetch теперь делает 5 попыток, таймаут 60 сек,
-# эмулирует свежий Chrome и передаёт полные браузерные заголовки.
-# Печатает отладочный вывод: статус ответа и длину HTML.
-# ==========================================================================
 def fetch(url, tries=5):
     headers = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -369,13 +364,29 @@ def parse_posts(html, page):
                     "text": body.get_text("\n", strip=True)})
     return out
 
+
+# ==========================================================================
+# ИСПРАВЛЕНО: total_pages теперь ищет "из NNNNN" в тексте страницы —
+# это самый надёжный способ, форум пишет "1 из 10484" в пагинации.
+# Проверка до 100000 страниц (а не 5000, как раньше).
+# ==========================================================================
 def total_pages(html):
+    if not html:
+        return 1
+    m = re.search(r"из\s+(\d{3,6})", html)
+    if m:
+        try:
+            n = int(m.group(1))
+            if 1 <= n <= 100000:
+                return n
+        except Exception:
+            pass
     soup = BeautifulSoup(html, "lxml")
     nav = soup.select_one(".pageNav")
     if nav and nav.get("data-last"):
         try:
             n = int(nav["data-last"])
-            if 1 <= n <= 5000:  # защита от мусора
+            if 1 <= n <= 100000:
                 return n
         except Exception:
             pass
@@ -384,9 +395,11 @@ def total_pages(html):
         s = a.get_text(strip=True).replace(" ", "")
         if s.isdigit():
             v = int(s)
-            if 1 <= v <= 5000:
+            if 1 <= v <= 100000:
                 nums.append(v)
     return max(nums) if nums else 1
+
+
 def first_date(html):
     if not html: return ""
     soup = BeautifulSoup(html, "lxml")
