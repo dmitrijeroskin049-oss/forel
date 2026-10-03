@@ -11,26 +11,19 @@ STATE_FILE = f"state_{THREAD_ID}.json"
 DB_FILE = f"fishing_{THREAD_ID}.db"
 
 START_DATE = "2024-01-01"
-BALANCE_START = "2026-09-09"
+BALANCE_START = "2026-09-01"
 REPORT_START = "2026-09-01"
 
-# ==========================================================================
-# РУЧНЫЕ ПРАВКИ — имеют высший приоритет, перекрывают всё найденное парсером.
-# Формат: "дата": {"stock": кг_запуска, "catch": кг_вылова}
 MANUAL_EVENTS = {
     "2026-09-27": {"catch": 312},
 }
-# ==========================================================================
 
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "").strip()
 LLM_API_URL = os.environ.get("LLM_API_URL", "https://openrouter.ai/api/v1/chat/completions").strip()
 LLM_MODEL = os.environ.get("LLM_MODEL", "meta-llama/llama-3.3-70b-instruct:free").strip()
 LLM_MAX_POSTS = int(os.environ.get("LLM_MAX_POSTS", "20"))
 
-if LLM_API_KEY:
-    print("LLM: kluch naiden, model " + LLM_MODEL)
-else:
-    print("LLM: kluch ne zadan")
+print("LLM: kluch " + ("naiden" if LLM_API_KEY else "ne zadan") + ", model " + LLM_MODEL)
 
 LLM_PROMPT = "Ты анализируешь отчёт рыбака с форелевого пруда.\nОпредели, в какие периоды суток форель КЛЕВАЛА, а в какие НЕ клевала.\nПериоды строго: \"утро\", \"день\", \"вечер\", \"ночь\".\nУчитывай отрицания: «утром тишина, вечером раздача» = утро не клевало, вечер клевало.\nОтветь строго одним JSON без пояснений:\n{\"bite\": [\"вечер\"], \"no_bite\": [\"утро\"], \"confident\": true}\nЕсли ничего не понятно про время клёва:\n{\"bite\": [], \"no_bite\": [], \"confident\": false}\n\nТекст отчёта:\n"
 
@@ -69,40 +62,25 @@ TIME_PERIODS = ["утро", "день", "вечер", "ночь"]
 
 def norm_loc(s):
     s = (s or "").lower().strip()
-    if "понтон" in s or "пантон" in s:
-        return "понтон"
-    if "стадион" in s:
-        return "под стадионом"
-    if "дуб" in s:
-        return "под дубами"
-    if "запуск" in s:
-        return "на запуске"
-    if "спорт" in s:
-        return "спорт зона"
-    if "угол" in s:
-        return "дальний угол"
+    if "понтон" in s or "пантон" in s: return "понтон"
+    if "стадион" in s: return "под стадионом"
+    if "дуб" in s: return "под дубами"
+    if "запуск" in s: return "на запуске"
+    if "спорт" in s: return "спорт зона"
+    if "угол" in s: return "дальний угол"
     return s
 
 def norm_lure(s):
     s = (s or "").lower().strip()
-    if "резин" in s:
-        return "резина"
-    if "светонакоп" in s:
-        return "стрейч (светонакопительный)"
-    if "стрейч" in s:
-        return "стрейч"
-    if "магот" in s:
-        return "магот"
-    if "паста" in s or "сыр" in s:
-        return "паста (сыр)"
-    if "кукуруз" in s:
-        return "кукуруза"
-    if "черв" in s:
-        return "червь"
-    if "пламп" in s:
-        return "пламп"
-    if "опарыш" in s:
-        return "опарыш"
+    if "резин" in s: return "резина"
+    if "светонакоп" in s: return "стрейч (светонакопительный)"
+    if "стрейч" in s: return "стрейч"
+    if "магот" in s: return "магот"
+    if "паста" in s or "сыр" in s: return "паста (сыр)"
+    if "кукуруз" in s: return "кукуруза"
+    if "черв" in s: return "червь"
+    if "пламп" in s: return "пламп"
+    if "опарыш" in s: return "опарыш"
     return s
 
 
@@ -332,14 +310,10 @@ def fetch(url, tries=5):
     }
     for a in range(tries):
         try:
-            r = requests.get(url, impersonate="chrome124", timeout=60,
-                             headers=headers)
+            r = requests.get(url, impersonate="chrome124", timeout=60, headers=headers)
             print("  fetch", url, "-> status", r.status_code, "len", len(r.text))
             if r.status_code == 200 and ("article" in r.text or "bbWrapper" in r.text):
                 return r.text
-            elif r.status_code == 200:
-                print("     нет article/bbWrapper. Первые 300 символов:")
-                print("     " + r.text[:300].replace("\n", " "))
         except Exception as e:
             print("  retry", a + 1, "err:", type(e).__name__, str(e)[:200])
         time.sleep(5 * (a + 1))
@@ -353,14 +327,33 @@ def parse_posts(html, page):
         raw = m.get("id", "")
         found = re.search(r"(\d+)", raw)
         pid = found.group(1) if found else "p%d_%d" % (page, len(out))
+        author = m.get("data-author", "")
+
+        # Ищем дату в нескольких местах
+        post_dt = ""
         t = m.select_one("time")
+        if t:
+            post_dt = t.get("datetime") or t.get("title") or ""
+        if not post_dt:
+            t2 = m.select_one(".message-attribution-main time, .u-dt, .datetime")
+            if t2:
+                post_dt = t2.get("datetime") or t2.get("title") or t2.get_text(strip=True)
+        if not post_dt:
+            t3 = m.select_one("[data-time]")
+            if t3:
+                try:
+                    ts = int(t3["data-time"])
+                    post_dt = str(date.fromtimestamp(ts))
+                except Exception:
+                    pass
+
         body = m.select_one(".bbWrapper")
         if not body:
             continue
         for q in body.select("blockquote"):
             q.decompose()
-        out.append({"post_id": pid, "page": page, "author": m.get("data-author", ""),
-                    "post_dt": (t.get("datetime") or "") if t else "",
+        out.append({"post_id": pid, "page": page, "author": author,
+                    "post_dt": post_dt,
                     "text": body.get_text("\n", strip=True)})
     return out
 
@@ -431,13 +424,12 @@ def llm_chat(prompt):
             headers={"Authorization": "Bearer " + LLM_API_KEY, "Content-Type": "application/json"},
             json={"model": LLM_MODEL, "temperature": 0, "max_tokens": 200,
                   "messages": [{"role": "user", "content": prompt}]}, timeout=90)
-        print("     LLM status:", r.status_code, "len:", len(r.text))
         if r.status_code != 200:
-            print("     LLM error body:", r.text[:500])
+            print("     LLM status:", r.status_code, "body:", r.text[:300])
             return None
         data = r.json()
         if "choices" not in data:
-            print("     LLM no 'choices'! body:", json.dumps(data, ensure_ascii=False)[:500])
+            print("     LLM no choices:", json.dumps(data, ensure_ascii=False)[:300])
             return None
         return data["choices"][0]["message"]["content"]
     except Exception as e:
@@ -625,13 +617,8 @@ def find_events(text, post_dt):
                     pass
 
         out.append({
-            "kind": kind,
-            "kg": kg,
-            "day": ed,
-            "dated": dated,
-            "is_today": is_today,
-            "quote": snippet(text, s),
-            "pos": s,
+            "kind": kind, "kg": kg, "day": ed, "dated": dated,
+            "is_today": is_today, "quote": snippet(text, s), "pos": s,
         })
 
     dated_stock = [r for r in out if r["kind"] == "stock" and r["dated"]]
@@ -730,18 +717,17 @@ def download(db, state):
     start_page = state["start_page"]
     state["newest"] = last
 
-    # === Собираем ВСЕ пропущенные страницы в диапазоне start_page..last ===
     have = set()
     if os.path.isdir(PAGES_DIR):
         for fn in os.listdir(PAGES_DIR):
             m = re.match(r"page_(\d+)\.json", fn)
             if m:
                 have.add(int(m.group(1)))
-    print("DEBUG: уже скачано в", PAGES_DIR, ":", len(have), "файлов")
+    print("DEBUG: уже скачано:", len(have), "файлов")
 
     needed_all = set(range(start_page, last + 1))
     missing = sorted(needed_all - have)
-    print("DEBUG: отсутствует страниц в диапазоне:", len(missing))
+    print("DEBUG: отсутствует страниц:", len(missing))
 
     tail = list(range(max(start_page, last - REFRESH_TAIL + 1), last + 1))
     tail_missing = [p for p in tail if p not in have]
@@ -751,8 +737,7 @@ def download(db, state):
     if len(todo) < BATCH:
         todo += mid_missing[:BATCH - len(todo)]
     todo = sorted(set(todo))
-    print("DEBUG: к загрузке:", len(todo), "страниц",
-          "(хвост:", len(tail_missing), ", середина:", len(todo) - len(tail_missing), ")")
+    print("DEBUG: к загрузке:", len(todo), "страниц")
 
     for i, p in enumerate(todo):
         h = fetch(page_url(p))
@@ -761,43 +746,39 @@ def download(db, state):
             if posts:
                 with open(PAGES_DIR + "/page_%06d.json" % p, "w", encoding="utf-8") as f:
                     json.dump(posts, f, ensure_ascii=False)
-                print(" " + str(i + 1) + "/" + str(len(todo)) + " str." + str(p) + ": " + str(len(posts)))
-        time.sleep(random.uniform(1.5, 2.5))
-        if (i + 1) % 20 == 0:
+                if (i + 1) % 10 == 0:
+                    print(" " + str(i + 1) + "/" + str(len(todo)) + " str." + str(p) + ": " + str(len(posts)))
+        time.sleep(random.uniform(1.2, 2.0))
+        if (i + 1) % 50 == 0:
             save_state(state)
 
-    all_dirs = [d for d in os.listdir(".") if d.startswith("pages") and os.path.isdir(d)]
-    print("DEBUG: сканирую папки:", all_dirs)
     total_inserted = 0
-    for d in all_dirs:
-        files = [f for f in os.listdir(d) if f.endswith(".json")]
-        print("DEBUG: в", d, "найдено файлов:", len(files))
-        for fn in files:
-            try:
-                with open(d + "/" + fn, encoding="utf-8") as f:
-                    for post in json.load(f):
-                        db.execute("INSERT OR REPLACE INTO posts VALUES (?,?,?,?,?)",
-                                   (post.get("post_id", ""), post.get("page", 0),
-                                    post.get("author", ""), post.get("post_dt", ""), post.get("text", "")))
-                        total_inserted += 1
-                db.commit()
-            except Exception as e:
-                print("file err", d + "/" + fn, e)
-    print("DEBUG: всего записей залито в базу:", total_inserted)
+    files = [f for f in os.listdir(PAGES_DIR) if f.endswith(".json")]
+    print("DEBUG: заливаю в базу", len(files), "файлов")
+    for fn in files:
+        try:
+            with open(PAGES_DIR + "/" + fn, encoding="utf-8") as f:
+                for post in json.load(f):
+                    db.execute("INSERT OR REPLACE INTO posts VALUES (?,?,?,?,?)",
+                               (post.get("post_id", ""), post.get("page", 0),
+                                post.get("author", ""), post.get("post_dt", ""), post.get("text", "")))
+                    total_inserted += 1
+            db.commit()
+        except Exception as e:
+            print("file err", fn, e)
+    print("DEBUG: залито записей:", total_inserted)
     save_state(state)
     return last
 
 
 def build(db, state, last_page):
     total_posts = db.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
-    pages_on_disk = len([f for f in os.listdir(PAGES_DIR) if f.endswith(".json")])
+    with_dates = db.execute("SELECT COUNT(*) FROM posts WHERE post_dt != ''").fetchone()[0]
     admin_posts = db.execute(
         "SELECT COUNT(*) FROM posts WHERE author IN (?,?)",
         ("Александр SALMO", "Митяй-Митинооо")
     ).fetchone()[0]
-    print("DEBUG: posts in db =", total_posts,
-          "| pages on disk =", pages_on_disk,
-          "| admin posts =", admin_posts)
+    print("DEBUG: постов:", total_posts, "| с датой:", with_dates, "| от админов:", admin_posts)
 
     days = defaultdict(list)
     stock_c = defaultdict(list)
@@ -818,26 +799,19 @@ def build(db, state, last_page):
         if not day:
             continue
 
-        if (
-            day >= REPORT_START
-            and (author or "") not in ADMIN_AUTHORS
-            and FOREL_RX.search(text)
-        ):
+        if (day >= REPORT_START and (author or "") not in ADMIN_AUTHORS and FOREL_RX.search(text)):
             loc = LOCATION_RX.search(text)
             lure = LURE_RX.search(text)
             if loc or lure:
                 anchor = loc or lure
-                reports.append(
-                    {
-                        "day": day,
-                        "author": author or "",
-                        "location": norm_loc(loc.group(0)) if loc else None,
-                        "lure": norm_lure(lure.group(0)) if lure else None,
-                        "success": bool(SUCCESS_RX.search(text)),
-                        "url": url,
-                        "quote": snippet(text, anchor.start(), 110)[:150],
-                    }
-                )
+                reports.append({
+                    "day": day, "author": author or "",
+                    "location": norm_loc(loc.group(0)) if loc else None,
+                    "lure": norm_lure(lure.group(0)) if lure else None,
+                    "success": bool(SUCCESS_RX.search(text)),
+                    "url": url,
+                    "quote": snippet(text, anchor.start(), 110)[:150],
+                })
             if TIME_HINT_RX.search(text):
                 llm_cands.append((pid, day, text))
 
@@ -846,9 +820,7 @@ def build(db, state, last_page):
 
         if day < BALANCE_START:
             try:
-                if (
-                    date.fromisoformat(BALANCE_START) - date.fromisoformat(day)
-                ).days > 10:
+                if (date.fromisoformat(BALANCE_START) - date.fromisoformat(day)).days > 10:
                     continue
             except Exception:
                 continue
@@ -857,30 +829,20 @@ def build(db, state, last_page):
             d = ev["day"]
             if not d or d < BALANCE_START:
                 continue
-
             if d > str(date.today()):
                 continue
-
             if ev["kind"] == "stock" and d in IGNORE_STOCK_DAYS:
                 continue
-
             if ev["kind"] == "stock" and ev["kg"] >= 1500:
                 ctx = text[max(0, ev["pos"] - 200):ev["pos"]]
                 if PERIOD_AGG_RX.search(ctx):
                     continue
 
             rec = {
-                "kg": ev["kg"],
-                "url": url,
-                "dt": dt,
-                "pos": ev["pos"],
-                "is_fact": (dt[:10] == d),
-                "is_today": ev.get("is_today", False),
-                "quote": (
-                    "пост " + dt[5:10] + " " + dt[11:16] + " " + ev["quote"]
-                )[:150],
+                "kg": ev["kg"], "url": url, "dt": dt, "pos": ev["pos"],
+                "is_fact": (dt[:10] == d), "is_today": ev.get("is_today", False),
+                "quote": ("пост " + dt[5:10] + " " + dt[11:16] + " " + ev["quote"])[:150],
             }
-
             if ev["kind"] == "stock":
                 stock_c[d].append(rec)
             else:
@@ -891,48 +853,29 @@ def build(db, state, last_page):
         pool = [r for r in recs if r["is_fact"]] or recs
         today_recs = [r for r in pool if r.get("is_today")]
         pick = (today_recs or pool)
-        day_events.setdefault(d, {})["stock"] = max(
-            pick, key=lambda r: (r["dt"], r["pos"])
-        )
+        day_events.setdefault(d, {})["stock"] = max(pick, key=lambda r: (r["dt"], r["pos"]))
     for d, recs in catch_c.items():
         today_recs = [r for r in recs if r.get("is_today")]
         pick = today_recs or recs
-        day_events.setdefault(d, {})["catch"] = max(
-            pick, key=lambda r: (r["dt"], r["pos"])
-        )
+        day_events.setdefault(d, {})["catch"] = max(pick, key=lambda r: (r["dt"], r["pos"]))
 
     for md, vals in MANUAL_EVENTS.items():
         for kk in ("stock", "catch"):
             if kk in vals and vals[kk]:
                 day_events.setdefault(md, {})[kk] = {
-                    "kg": int(vals[kk]),
-                    "url": THREAD,
-                    "dt": md + "T23:59",
-                    "pos": 10**9,
-                    "is_fact": True,
-                    "is_today": False,
-                    "quote": "ручная правка (вписано в MANUAL_EVENTS)",
+                    "kg": int(vals[kk]), "url": THREAD, "dt": md + "T23:59",
+                    "pos": 10**9, "is_fact": True, "is_today": False,
+                    "quote": "ручная правка (MANUAL_EVENTS)",
                 }
 
-    for d in sorted(day_events):
-        if (
-            "stock" in day_events[d]
-            and "catch" not in day_events[d]
-            and d != str(date.today())
-        ):
-            print(
-                "VNIMANIE: za "
-                + d
-                + " est zapusk, no NET vylova. Prover forum ili vpishi v MANUAL_EVENTS"
-            )
+    print("DEBUG: дней с событиями:", len(day_events))
 
     weather = load_weather()
 
     llm_cands.sort(key=lambda c: c[1], reverse=True)
     agg, analyzed = run_llm(db, llm_cands)
     llm_time = {
-        "enabled": bool(LLM_API_KEY),
-        "analyzed": analyzed,
+        "enabled": bool(LLM_API_KEY), "analyzed": analyzed,
         "labels": TIME_PERIODS,
         "bite": [agg[p]["bite"] for p in TIME_PERIODS],
         "no_bite": [agg[p]["no_bite"] for p in TIME_PERIODS],
@@ -945,37 +888,27 @@ def build(db, state, last_page):
     for d, urls in days.items():
         monthly[d[:7]].append(len(urls))
         ph = moon_phase(d)
-        if ph:
-            moon_b[ph].append(len(urls))
+        if ph: moon_b[ph].append(len(urls))
         pr = (weather.get(d) or {}).get("pressure")
         if pr is not None:
             g = "ниже 745" if pr < 745 else ("745-760" if pr <= 760 else "выше 760")
             press_g[g].append(len(urls))
 
-    def avg(v):
-        return round(sum(v) / len(v), 2) if v else 0
+    def avg(v): return round(sum(v) / len(v), 2) if v else 0
 
     moon_labels = [p for p in MOON_ORDER if p in moon_b]
-    moon_stats = {
-        "labels": moon_labels,
-        "values": [avg(moon_b[p]) for p in moon_labels],
-        "days": [len(moon_b[p]) for p in moon_labels],
-    }
+    moon_stats = {"labels": moon_labels, "values": [avg(moon_b[p]) for p in moon_labels],
+                  "days": [len(moon_b[p]) for p in moon_labels]}
 
     collected = len([f for f in os.listdir(PAGES_DIR) if f.endswith(".json")])
-    need = max(
-        1, state.get("newest", last_page) - state.get("start_page", last_page) + 1
-    )
+    need = max(1, state.get("newest", last_page) - state.get("start_page", last_page) + 1)
 
     stats = {
         "monthly": dict((k, avg(v)) for k, v in sorted(monthly.items())),
         "pressure": dict((k, avg(v)) for k, v in press_g.items()),
         "total_posts": sum(len(v) for v in days.values()),
-        "active_days": len(days),
-        "collected": collected,
-        "need": need,
-        "pct": round(collected / need * 100, 1),
-        "updated": str(date.today()),
+        "active_days": len(days), "collected": collected, "need": need,
+        "pct": round(collected / need * 100, 1), "updated": str(date.today()),
     }
 
     table = []
@@ -984,19 +917,9 @@ def build(db, state, last_page):
         wind = None
         if w.get("wind_speed") is not None:
             wind = (w.get("wind_dir") or "?") + " " + str(w["wind_speed"]) + " м/с"
-        table.append(
-            {
-                "day": d,
-                "posts": len(days[d]),
-                "t_day": w.get("t_day"),
-                "t_night": w.get("t_night"),
-                "wind": wind,
-                "pressure": w.get("pressure"),
-                "precip": w.get("precip"),
-                "moon": moon_phase(d),
-                "links": days[d][:5],
-            }
-        )
+        table.append({"day": d, "posts": len(days[d]), "t_day": w.get("t_day"),
+                      "t_night": w.get("t_night"), "wind": wind, "pressure": w.get("pressure"),
+                      "precip": w.get("precip"), "moon": moon_phase(d), "links": days[d][:5]})
 
     dates, st_l, ct_l, rm_l = [], [], [], []
     total_st = total_ct = 0
@@ -1006,121 +929,61 @@ def build(db, state, last_page):
         cur = date.fromisoformat(min(day_events))
         rem = 0
         today_obj = date.today()
-
         while cur <= today_obj:
             ds = str(cur)
             ev = day_events.get(ds, {})
             s = ev.get("stock", {}).get("kg", 0)
             c = ev.get("catch", {}).get("kg", 0)
-
             if cur == today_obj and s and not c:
                 s = 0
-
-            if ev.get("stock"):
-                last_stock = ds
-
-            total_st += s
-            total_ct += c
-
+            if ev.get("stock"): last_stock = ds
+            total_st += s; total_ct += c
             rem = rem + s - c
-
-            dates.append(ds)
-            st_l.append(s)
-            ct_l.append(c)
-            rm_l.append(rem)
-
+            dates.append(ds); st_l.append(s); ct_l.append(c); rm_l.append(rem)
             cur += timedelta(days=1)
 
     tev = day_events.get(str(date.today()), {}) if day_events else {}
-    today_pending_stock = (
-        tev["stock"]["kg"] if (tev.get("stock") and not tev.get("catch")) else 0
-    )
+    today_pending_stock = tev["stock"]["kg"] if (tev.get("stock") and not tev.get("catch")) else 0
 
     events = []
     for d in sorted(day_events, reverse=True)[:40]:
         for k in ("stock", "catch"):
             if k in day_events[d]:
                 e = day_events[d][k]
-                events.append(
-                    {
-                        "day": d,
-                        "type": "запуск" if k == "stock" else "вылов",
-                        "kg": e["kg"],
-                        "url": e["url"],
-                        "quote": e["quote"],
-                    }
-                )
+                events.append({"day": d, "type": "запуск" if k == "stock" else "вылов",
+                               "kg": e["kg"], "url": e["url"], "quote": e["quote"]})
 
     reports.sort(key=lambda r: r["day"], reverse=True)
-    tl = defaultdict(int)
-    tu = defaultdict(int)
+    tl = defaultdict(int); tu = defaultdict(int)
     for r in reports:
-        if r["location"]:
-            tl[norm_loc(r["location"])] += 1
-        if r["lure"]:
-            tu[norm_lure(r["lure"])] += 1
+        if r["location"]: tl[norm_loc(r["location"])] += 1
+        if r["lure"]: tu[norm_lure(r["lure"])] += 1
 
     cw = weather.get(str(date.today())) or {}
 
     balance = {
-        "start": BALANCE_START,
-        "total_stocked": total_st,
-        "total_caught": total_ct,
-        "remaining": rm_l[-1] if rm_l else 0,
-        "today_pending_stock": today_pending_stock,
-        "days_since_stock": (
-            (date.today() - date.fromisoformat(last_stock)).days if last_stock else None
-        ),
-        "series": {
-            "dates": dates,
-            "stocked": st_l,
-            "caught": ct_l,
-            "remaining": rm_l,
-        },
+        "start": BALANCE_START, "total_stocked": total_st, "total_caught": total_ct,
+        "remaining": rm_l[-1] if rm_l else 0, "today_pending_stock": today_pending_stock,
+        "days_since_stock": ((date.today() - date.fromisoformat(last_stock)).days if last_stock else None),
+        "series": {"dates": dates, "stocked": st_l, "caught": ct_l, "remaining": rm_l},
         "events": events,
     }
 
-    payload = json.dumps(
-        {
-            "stats": stats,
-            "table": table,
-            "balance": balance,
-            "current_weather": {
-                "temp": cw.get("t_day"),
-                "pressure": cw.get("pressure"),
-                "precip": cw.get("precip"),
-                "moon": moon_phase(str(date.today())),
-            },
-            "llm_time": llm_time,
-            "moon_stats": moon_stats,
-            "reports": reports[:80],
-            "top_locations": dict(
-                sorted(tl.items(), key=lambda x: -x[1])[:12]
-            ),
-            "top_lures": dict(
-                sorted(tu.items(), key=lambda x: -x[1])[:12]
-            ),
-        },
-        ensure_ascii=False,
-    ).replace("</", "<\\/")
+    payload = json.dumps({
+        "stats": stats, "table": table, "balance": balance,
+        "current_weather": {"temp": cw.get("t_day"), "pressure": cw.get("pressure"),
+                            "precip": cw.get("precip"), "moon": moon_phase(str(date.today()))},
+        "llm_time": llm_time, "moon_stats": moon_stats, "reports": reports[:80],
+        "top_locations": dict(sorted(tl.items(), key=lambda x: -x[1])[:12]),
+        "top_lures": dict(sorted(tu.items(), key=lambda x: -x[1])[:12]),
+    }, ensure_ascii=False).replace("</", "<\\/")
 
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(TEMPLATE.replace("__DATA__", payload))
 
-    print(
-        "Sait sobran. Ostatok "
-        + str(balance["remaining"])
-        + " kg, otchetov "
-        + str(len(reports))
-        + ", LLM "
-        + str(analyzed)
-    )
-    if today_pending_stock:
-        print(
-            "Segodnyashniy zapusk "
-            + str(today_pending_stock)
-            + " kg otlojen do vechernego otcheta o vylove"
-        )
+    print("Sait sobran. Ostatok " + str(balance["remaining"]) + " kg, otchetov " +
+          str(len(reports)) + ", LLM " + str(analyzed))
+
 
 def main():
     os.makedirs(PAGES_DIR, exist_ok=True)
