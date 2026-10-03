@@ -11,23 +11,20 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - run: pip install curl_cffi beautifulsoup4 lxml
-
       - name: Build site
         env:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_API_URL: "https://openrouter.ai/api/v1/chat/completions"
-          LLM_MODEL: "google/gemini-2.0-flash-exp:free"
-          LLM_MAX_POSTS: "50"
+          LLM_MODEL: "meta-llama/llama-3.3-70b-instruct:free"
+          LLM_MAX_POSTS: "30"
         run: python main.py
-
       - name: Commit results
         run: |
           git config user.name "bot"
