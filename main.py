@@ -30,7 +30,7 @@ LLM_PROMPT = "Ты анализируешь отчёт рыбака с форе�
 ADMIN_AUTHORS = ["Александр SALMO", "Митяй-Митинооо"]
 IGNORE_STOCK_DAYS = {"2026-09-04", "2026-09-05", "2026-09-06", "2026-09-07", "2026-09-08"}
 BATCH = 1500
-REFRESH_TAIL = 12
+REFRESH_TAIL = 200  # принудительно перекачиваем последние 200 страниц
 
 FOREL_RX = re.compile(r"форел", re.I)
 OTHER_FISH = re.compile(r"осет|карп|сом\b|щук|белуг|стерляд|карас|окун|судак|налим|амур|толстолоб|линь", re.I)
@@ -329,7 +329,6 @@ def parse_posts(html, page):
         pid = found.group(1) if found else "p%d_%d" % (page, len(out))
         author = m.get("data-author", "")
 
-        # Ищем дату в нескольких местах
         post_dt = ""
         t = m.select_one("time")
         if t:
@@ -729,15 +728,18 @@ def download(db, state):
     missing = sorted(needed_all - have)
     print("DEBUG: отсутствует страниц:", len(missing))
 
-    tail = list(range(max(start_page, last - REFRESH_TAIL + 1), last + 1))
-    tail_missing = [p for p in tail if p not in have]
-    mid_missing = [p for p in missing if p not in tail_missing]
+    # === ПРИНУДИТЕЛЬНАЯ ПЕРЕКАЧКА ПОСЛЕДНИХ REFRESH_TAIL СТРАНИЦ ===
+    force_refresh = list(range(max(start_page, last - REFRESH_TAIL + 1), last + 1))
+    force_refresh = [p for p in force_refresh if p not in have] or force_refresh
 
-    todo = tail_missing[:]
-    if len(todo) < BATCH:
-        todo += mid_missing[:BATCH - len(todo)]
-    todo = sorted(set(todo))
-    print("DEBUG: к загрузке:", len(todo), "страниц")
+    mid_missing = [p for p in missing if p not in force_refresh]
+
+    todo = list(force_refresh)
+    for p in mid_missing:
+        if p not in todo:
+            todo.append(p)
+    todo = sorted(todo)[:BATCH]
+    print("DEBUG: к загрузке:", len(todo), "страниц (принудительно последних:", len(force_refresh), ", из пропусков:", len(todo) - len(force_refresh), ")")
 
     for i, p in enumerate(todo):
         h = fetch(page_url(p))
