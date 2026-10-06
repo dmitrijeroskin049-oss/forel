@@ -30,7 +30,7 @@ LLM_PROMPT = "Ты анализируешь отчёт рыбака с форе�
 ADMIN_AUTHORS = ["Александр SALMO", "Митяй-Митинооо"]
 IGNORE_STOCK_DAYS = {"2026-09-04", "2026-09-05", "2026-09-06", "2026-09-07", "2026-09-08"}
 BATCH = 1500
-REFRESH_TAIL = 200  # принудительно перекачиваем последние 200 страниц
+REFRESH_TAIL = 200
 
 FOREL_RX = re.compile(r"форел", re.I)
 OTHER_FISH = re.compile(r"осет|карп|сом\b|щук|белуг|стерляд|карас|окун|судак|налим|амур|толстолоб|линь", re.I)
@@ -47,6 +47,7 @@ TIME_HINT_RX = re.compile(r"утр|днём|днем|вечер|ноч|расс�
 BAD_BETWEEN_RX = re.compile(r"корм|прикорм|пеллет|смес", re.I)
 SENTENCE_RX = re.compile(r"[.!?]")
 
+# --- Отсечение агрегатов за период ("за прошедшую неделю") и приоритет "за сегодня" ---
 PERIOD_AGG_RX = re.compile(
     r"за\s+(прошедш\w*|прошл\w*|минувш\w*|эт\w*)\s*"
     r"(недел\w*|месяц\w*|сутк\w*|дн\w*|период\w*)|"
@@ -54,6 +55,9 @@ PERIOD_AGG_RX = re.compile(
     re.I
 )
 TODAY_RX = re.compile(r"за\s+сегодня|сегодня\s+(вылов|улов|поймано)", re.I)
+
+# --- НОВОЕ: маркеры цены, чтобы отсечь "300 руб", "шок цена" и т.п. ---
+PRICE_RX = re.compile(r"руб|₽|\bр\.?\b|цена|стоит|шок|у\.е\.|бакс|\$|евро", re.I)
 
 WIND_DIRS = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
 MOON_ORDER = ["новолуние", "растущий серп", "первая четверть", "растущая", "полнолуние", "убывающая", "последняя четверть", "убывающий серп"]
@@ -547,9 +551,18 @@ def find_events(text, post_dt):
     for m in KG_RX.finditer(text):
         s, e = m.span()
         before = text[max(0, s - 45):s].lower()
+        after = text[e:min(len(text), e + 45)].lower()
+        window = text[max(0, s - 50):min(len(text), e + 50)]
+
         if re.search(r"навеск\w*[^0-9]{0,25}$", before):
             continue
         if OTHER_FISH.search(text[max(0, s - 25):min(len(text), e + 25)]):
+            continue
+
+        # --- НОВОЕ: отсекаем всё, что похоже на цену ---
+        if PRICE_RX.search(window):
+            continue
+        if re.match(r"\s*(руб|₽|р\.\b|рублей|р\b)", after):
             continue
 
         if in_period(s):
@@ -728,7 +741,6 @@ def download(db, state):
     missing = sorted(needed_all - have)
     print("DEBUG: отсутствует страниц:", len(missing))
 
-    # === ПРИНУДИТЕЛЬНАЯ ПЕРЕКАЧКА ПОСЛЕДНИХ REFRESH_TAIL СТРАНИЦ ===
     force_refresh = list(range(max(start_page, last - REFRESH_TAIL + 1), last + 1))
     force_refresh = [p for p in force_refresh if p not in have] or force_refresh
 
