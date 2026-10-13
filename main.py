@@ -55,8 +55,6 @@ PERIOD_AGG_RX = re.compile(
 )
 TODAY_RX = re.compile(r"за\s+сегодня|сегодня\s+(вылов|улов|поймано)", re.I)
 PRICE_RX = re.compile(r"руб|₽|\bр\.?\b|цена|стоит|шок|у\.е\.|бакс|\$|евро", re.I)
-
-# --- НОВОЕ: маркеры прибавки к вылову (+35кг, доловил 35, к вылову, к сегодняшнему) ---
 PLUS_RX = re.compile(r"доловил|к\s+вылову|к\s+сегодняшн|к\s+утренн|к\s+вечерн|плюс", re.I)
 
 WIND_DIRS = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
@@ -208,7 +206,7 @@ footer{margin-top:20px;text-align:center}
 <div class="trow"><span class="ticon">&#x1F319;</span><span class="tlabel">Луна</span><b id="curMoon">-</b></div>
 </div>
 
-<details open><summary>&#x1F3AB; Условия рыбалки и цены</summary><div class="card">
+<details><summary>&#x1F3AB; Условия рыбалки и цены</summary><div class="card">
 <div class="price-grid">
 <div class="price-card"><div class="ico">&#x1F305;</div><div class="info"><div class="name">День</div><div class="val">4 000 &#x20BD;</div><div class="extra">07:00 – 18:00</div></div></div>
 <div class="price-card"><div class="ico">&#x1F307;</div><div class="info"><div class="name">Обед</div><div class="val">2 200 &#x20BD;</div><div class="extra">12:00 – 18:00</div></div></div>
@@ -232,17 +230,17 @@ footer{margin-top:20px;text-align:center}
 <p class="note" style="margin-top:11px">Цены и правила обновляются вручную.</p>
 </div></details>
 
-<details open><summary>&#x1F3C6; Топ-5 лучших дней (по вылову)</summary><div class="card">
+<details><summary>&#x1F3C6; Топ-5 лучших дней (по вылову)</summary><div class="card">
 <div class="top-days" id="topDays"></div>
 </div></details>
 
-<details open><summary>&#x1F41F; Остаток форели в водоёме</summary><div class="card">
+<details><summary>&#x1F41F; Остаток форели в водоёме</summary><div class="card">
 <div class="big" id="rem">-</div>
 <div class="note">запущено <b id="st" style="color:#4ade80">0</b> кг &#8226; выловлено <b id="ct" style="color:#f87171">0</b> кг &#8226; отсчёт с <span id="bs"></span><br>последний запуск: <span id="dsl">-</span> &#8226; обновлено <span id="upd"></span><span id="pend"></span></div>
 <div class="note" style="margin-top:6px">Сегодняшний запуск учитывается в остатке только после отчёта о вылове за день.</div>
 </div></details>
 
-<details open><summary>&#x1F4CA; Баланс</summary><div class="card" id="balbox"><div class="chartbox"><canvas id="bal"></canvas></div></div></details>
+<details><summary>&#x1F4CA; Баланс</summary><div class="card" id="balbox"><div class="chartbox"><canvas id="bal"></canvas></div></div></details>
 
 <details><summary>&#x1F4D3; Журнал запусков и выловов</summary><div class="card">
 <div class="scrollx"><table id="ev"></table></div>
@@ -269,7 +267,7 @@ footer{margin-top:20px;text-align:center}
 <div class="note">t день &#x2014; максимум, t ночь &#x2014; минимум за сутки.</div>
 </div></details>
 
-<details open><summary>Где и на что ловят (точки и приманки)</summary><div class="card">
+<details><summary>Где и на что ловят (точки и приманки)</summary><div class="card">
 <h3 style="font-size:.9rem;color:#93c5fd;margin:2px 0 6px">Популярные локации</h3><div class="scrollx"><table id="toploc" style="min-width:100%"></table></div>
 <h3 style="font-size:.9rem;color:#93c5fd;margin:14px 0 6px">Топ рабочих приманок</h3><div class="chartbox"><canvas id="lure"></canvas></div>
 <h3 style="font-size:.9rem;color:#93c5fd;margin:14px 0 6px">Последние отчёты с водоёма</h3><div class="scrollx"><table id="reports"></table></div>
@@ -703,7 +701,6 @@ def find_events(text, post_dt):
 
         is_today = any(abs(s - tp) <= 40 for tp in today_positions)
 
-        # === НОВОЕ: определяем, прибавка ли это ===
         plus_zone = text[max(0, s - 30):s]
         is_plus = bool(re.search(r"\+\s*$", plus_zone))
         if not is_plus and re.match(r"^\s*\+", text[s:s+3]):
@@ -959,14 +956,12 @@ def build(db, state, last_page):
 
     day_events = {}
 
-    # === ЗАПУСКИ: оставляем как было (берём самый поздний за день) ===
     for d, recs in stock_c.items():
         pool = [r for r in recs if r["is_fact"]] or recs
         today_recs = [r for r in pool if r.get("is_today")]
         pick = (today_recs or pool)
         day_events.setdefault(d, {})["stock"] = max(pick, key=lambda r: (r["dt"], r["pos"]))
 
-    # === ВЫЛОВЫ: база + прибавки ===
     for d, recs in catch_c.items():
         main_recs = [r for r in recs if not r.get("is_plus")]
         plus_recs = [r for r in recs if r.get("is_plus")]
