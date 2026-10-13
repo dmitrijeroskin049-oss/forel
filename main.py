@@ -56,6 +56,9 @@ PERIOD_AGG_RX = re.compile(
 TODAY_RX = re.compile(r"за\s+сегодня|сегодня\s+(вылов|улов|поймано)", re.I)
 PRICE_RX = re.compile(r"руб|₽|\bр\.?\b|цена|стоит|шок|у\.е\.|бакс|\$|евро", re.I)
 
+# --- НОВОЕ: маркеры прибавки к вылову (+35кг, доловил 35, к вылову, к сегодняшнему) ---
+PLUS_RX = re.compile(r"доловил|к\s+вылову|к\s+сегодняшн|к\s+утренн|к\s+вечерн|плюс", re.I)
+
 WIND_DIRS = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
 MOON_ORDER = ["новолуние", "растущий серп", "первая четверть", "растущая", "полнолуние", "убывающая", "последняя четверть", "убывающий серп"]
 TIME_PERIODS = ["утро", "день", "вечер", "ночь"]
@@ -64,7 +67,7 @@ TIME_PERIODS = ["утро", "день", "вечер", "ночь"]
 def norm_loc(s):
     s = (s or "").lower().strip()
     if "понтон" in s or "пантон" in s: return "понтон"
-    if "стадион" in s: return "под стадионом"
+    if "стадион" in s: return "стадион"
     if "дуб" in s: return "под дубами"
     if "запуск" in s: return "на запуске"
     if "спорт" in s: return "спорт зона"
@@ -108,13 +111,11 @@ a:hover{text-decoration:underline}
 h1{margin:0;font-size:1.75rem;font-weight:900;letter-spacing:.3px;background:linear-gradient(92deg,#7dd3fc 0%,#38bdf8 35%,#a78bfa 70%,#fbbf24 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:#7dd3fc}
 .hero p{margin:7px 0 0;color:#94a3b8;font-size:.83rem;letter-spacing:.4px}
 
-/* === ГЛАВНАЯ ЦИФРА В ШАПКЕ === */
 .hero-number{font-size:3.4rem;font-weight:900;color:#fbbf24;text-shadow:0 0 40px rgba(251,191,36,.5);letter-spacing:1px;margin:12px 0 4px;line-height:1}
 .hero-number .unit{font-size:1.4rem;color:#94a3b8;font-weight:700;margin-left:6px}
 .hero-sub{color:#94a3b8;font-size:.82rem;margin:0}
 .hero-sub b{color:#4ade80}
 
-/* === ПРОГНОЗ КЛЁВА === */
 .forecast{display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:16px;margin:10px 0;border:1px solid;background:linear-gradient(180deg,rgba(30,41,59,.9),rgba(21,31,52,.9));box-shadow:0 10px 30px rgba(2,6,23,.45)}
 .forecast.good{border-color:rgba(74,222,128,.5);box-shadow:0 0 30px rgba(74,222,128,.15),0 10px 30px rgba(2,6,23,.45)}
 .forecast.ok{border-color:rgba(251,191,36,.5);box-shadow:0 0 30px rgba(251,191,36,.15),0 10px 30px rgba(2,6,23,.45)}
@@ -126,7 +127,6 @@ h1{margin:0;font-size:1.75rem;font-weight:900;letter-spacing:.3px;background:lin
 .forecast.bad .title{color:#f87171}
 .forecast .reason{font-size:.78rem;color:#94a3b8;margin:0;line-height:1.4}
 
-/* === КАРТОЧКИ ЦЕН === */
 .price-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
 @media(max-width:520px){.price-grid{grid-template-columns:1fr}}
 .price-card{background:linear-gradient(180deg,rgba(30,41,59,.9),rgba(21,31,52,.9));border:1px solid rgba(148,163,184,.16);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;transition:border-color .2s}
@@ -176,7 +176,6 @@ tbody tr:hover td{background:rgba(56,189,248,.05)}
 .chartbox{position:relative;height:240px;width:100%}
 footer{margin-top:20px;text-align:center}
 
-/* === ТОП-5 ДНЕЙ === */
 .top-days{display:grid;gap:8px;margin:10px 0}
 .top-day{display:flex;align-items:center;gap:12px;padding:10px 14px;background:linear-gradient(90deg,rgba(56,189,248,.06),transparent 70%);border:1px solid rgba(148,163,184,.14);border-radius:12px}
 .top-day .rank{font-size:1.4rem;font-weight:900;color:#fbbf24;flex:none;width:32px;text-align:center}
@@ -187,14 +186,12 @@ footer{margin-top:20px;text-align:center}
 </head>
 <body>
 
-<!-- === ШАПКА С БОЛЬШОЙ ЦИФРОЙ === -->
 <header class="hero">
 <div class="ttl"><h1>&#x1F41F; Форель в Красногорске</h1></div>
 <div class="hero-number" id="heroRem">— <span class="unit">кг</span></div>
 <p class="hero-sub">остаток форели в водоёме • обновлено <span id="heroUpd">—</span></p>
 </header>
 
-<!-- === ПРОГНОЗ КЛЁВА === -->
 <div class="forecast" id="forecastBox">
 <div class="emoji" id="fcEmoji">⏳</div>
 <div>
@@ -211,7 +208,6 @@ footer{margin-top:20px;text-align:center}
 <div class="trow"><span class="ticon">&#x1F319;</span><span class="tlabel">Луна</span><b id="curMoon">-</b></div>
 </div>
 
-<!-- === ЦЕНЫ С ИКОНКАМИ === -->
 <details open><summary>&#x1F3AB; Условия рыбалки и цены</summary><div class="card">
 <div class="price-grid">
 <div class="price-card"><div class="ico">&#x1F305;</div><div class="info"><div class="name">День</div><div class="val">4 000 &#x20BD;</div><div class="extra">07:00 – 18:00</div></div></div>
@@ -236,7 +232,6 @@ footer{margin-top:20px;text-align:center}
 <p class="note" style="margin-top:11px">Цены и правила обновляются вручную.</p>
 </div></details>
 
-<!-- === ТОП-5 ЛУЧШИХ ДНЕЙ МЕСЯЦА === -->
 <details open><summary>&#x1F3C6; Топ-5 лучших дней (по вылову)</summary><div class="card">
 <div class="top-days" id="topDays"></div>
 </div></details>
@@ -289,12 +284,10 @@ try{D=JSON.parse(document.getElementById('sitedata').textContent)}catch(e){conso
 try{
 if(window.Chart){Chart.defaults.color='#94a3b8';Chart.defaults.borderColor='rgba(51,65,85,.5)';Chart.defaults.font.family="system-ui,-apple-system,'Segoe UI',sans-serif"}
 
-// === ШАПКА: остаток + обновлено ===
 var B=D.balance||{};
 document.getElementById('heroRem').innerHTML=(B.remaining||0)+' <span class="unit">кг</span>';
 document.getElementById('heroUpd').textContent=(D.stats&&D.stats.updated)||'—';
 
-// === ПРОГНОЗ КЛЁВА ===
 (function(){
   var cw=D.current_weather||{};
   var temp=cw.temp, press=cw.pressure, moon=cw.moon||'';
@@ -321,7 +314,6 @@ document.getElementById('heroUpd').textContent=(D.stats&&D.stats.updated)||'—'
   document.getElementById('fcReason').textContent='Причина: '+reasons.join(' • ');
 })();
 
-// === ТОП-5 ДНЕЙ ===
 (function(){
   var ser=B.series||{};
   var dates=ser.dates||[], caught=ser.caught||[], stocked=ser.stocked||[];
@@ -337,7 +329,6 @@ document.getElementById('heroUpd').textContent=(D.stats&&D.stats.updated)||'—'
   document.getElementById('topDays').innerHTML=html||'<p class="note">Пока нет данных.</p>';
 })();
 
-// === Время и верхняя панель ===
 function topInfo(){
 var now=new Date();
 document.getElementById('curDate').textContent=now.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
@@ -712,6 +703,16 @@ def find_events(text, post_dt):
 
         is_today = any(abs(s - tp) <= 40 for tp in today_positions)
 
+        # === НОВОЕ: определяем, прибавка ли это ===
+        plus_zone = text[max(0, s - 30):s]
+        is_plus = bool(re.search(r"\+\s*$", plus_zone))
+        if not is_plus and re.match(r"^\s*\+", text[s:s+3]):
+            is_plus = True
+        if not is_plus and PLUS_RX.search(plus_zone):
+            is_plus = True
+        if not is_plus and re.search(r"ещё\s*$|еще\s*$|плюс\s*$", plus_zone, re.I):
+            is_plus = True
+
         if kind == "stock":
             ctx = text[max(0, s - 250):min(len(text), e + 250)]
             if not FOREL_RX.search(ctx) and OTHER_FISH.search(ctx):
@@ -741,7 +742,8 @@ def find_events(text, post_dt):
 
         out.append({
             "kind": kind, "kg": kg, "day": ed, "dated": dated,
-            "is_today": is_today, "quote": snippet(text, s), "pos": s,
+            "is_today": is_today, "is_plus": is_plus,
+            "quote": snippet(text, s), "pos": s,
         })
 
     dated_stock = [r for r in out if r["kind"] == "stock" and r["dated"]]
@@ -947,6 +949,7 @@ def build(db, state, last_page):
             rec = {
                 "kg": ev["kg"], "url": url, "dt": dt, "pos": ev["pos"],
                 "is_fact": (dt[:10] == d), "is_today": ev.get("is_today", False),
+                "is_plus": ev.get("is_plus", False),
                 "quote": ("пост " + dt[5:10] + " " + dt[11:16] + " " + ev["quote"])[:150],
             }
             if ev["kind"] == "stock":
@@ -955,15 +958,47 @@ def build(db, state, last_page):
                 catch_c[d].append(rec)
 
     day_events = {}
+
+    # === ЗАПУСКИ: оставляем как было (берём самый поздний за день) ===
     for d, recs in stock_c.items():
         pool = [r for r in recs if r["is_fact"]] or recs
         today_recs = [r for r in pool if r.get("is_today")]
         pick = (today_recs or pool)
         day_events.setdefault(d, {})["stock"] = max(pick, key=lambda r: (r["dt"], r["pos"]))
+
+    # === ВЫЛОВЫ: база + прибавки ===
     for d, recs in catch_c.items():
-        today_recs = [r for r in recs if r.get("is_today")]
-        pick = today_recs or recs
-        day_events.setdefault(d, {})["catch"] = max(pick, key=lambda r: (r["dt"], r["pos"]))
+        main_recs = [r for r in recs if not r.get("is_plus")]
+        plus_recs = [r for r in recs if r.get("is_plus")]
+
+        base = 0
+        base_rec = None
+        if main_recs:
+            best = max(main_recs, key=lambda r: (r["dt"], r["pos"]))
+            base = best["kg"]
+            base_rec = best
+
+        plus_sum = sum(r["kg"] for r in plus_recs)
+
+        if base_rec is None and plus_recs:
+            base_rec = max(plus_recs, key=lambda r: (r["dt"], r["pos"]))
+            base = base_rec["kg"]
+            plus_sum = 0
+
+        total = base + plus_sum
+        if base_rec:
+            quote = base_rec["quote"]
+            if plus_sum:
+                quote = (quote + " + прибавка " + str(plus_sum) + " кг")[:150]
+            day_events.setdefault(d, {})["catch"] = {
+                "kg": total,
+                "url": base_rec["url"],
+                "dt": base_rec["dt"],
+                "pos": base_rec["pos"],
+                "is_fact": base_rec["is_fact"],
+                "is_today": base_rec.get("is_today", False),
+                "quote": quote,
+            }
 
     for md, vals in MANUAL_EVENTS.items():
         for kk in ("stock", "catch"):
