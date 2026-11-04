@@ -14,6 +14,9 @@ START_DATE = "2024-01-01"
 BALANCE_START = "2026-09-01"
 REPORT_START = "2026-09-01"
 
+# === ИСПРАВЛЕНО: дата открытия спорт-зоны ===
+SPORT_ZONE_START = "2026-10-30"
+
 MANUAL_EVENTS = {
     "2026-09-27": {"catch": 312},
 }
@@ -57,6 +60,9 @@ TODAY_RX = re.compile(r"за\s+сегодня|сегодня\s+(вылов|ул�
 PRICE_RX = re.compile(r"руб|₽|\bр\.?\b|цена|стоит|шок|у\.е\.|бакс|\$|евро", re.I)
 PLUS_RX = re.compile(r"доловил|к\s+вылову|к\s+сегодняшн|к\s+утренн|к\s+вечерн|плюс", re.I)
 
+# === Маркер спорт-зоны ===
+SPORT_RX = re.compile(r"спорт[\s-]?зон|спортивн\w*\s+зон", re.I)
+
 WIND_DIRS = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
 MOON_ORDER = ["новолуние", "растущий серп", "первая четверть", "растущая", "полнолуние", "убывающая", "последняя четверть", "убывающий серп"]
 TIME_PERIODS = ["утро", "день", "вечер", "ночь"]
@@ -68,7 +74,7 @@ def norm_loc(s):
     if "стадион" in s: return "стадион"
     if "дуб" in s: return "под дубами"
     if "запуск" in s: return "на запуске"
-    if "спорт" in s: return "спорт зона"
+    if SPORT_RX.search(s): return "спорт зона"
     if "угол" in s: return "дальний угол"
     return s
 
@@ -113,6 +119,14 @@ h1{margin:0;font-size:1.75rem;font-weight:900;letter-spacing:.3px;background:lin
 .hero-number .unit{font-size:1.4rem;color:#94a3b8;font-weight:700;margin-left:6px}
 .hero-sub{color:#94a3b8;font-size:.82rem;margin:0}
 .hero-sub b{color:#4ade80}
+
+.pond-switch{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.pond-btn{padding:14px 12px;border-radius:14px;background:linear-gradient(180deg,rgba(30,41,59,.9),rgba(21,31,52,.9));border:2px solid rgba(148,163,184,.16);cursor:pointer;text-align:center;transition:all .2s;font-family:inherit;color:#e2e8f0}
+.pond-btn:hover{border-color:rgba(56,189,248,.4)}
+.pond-btn.active{border-color:#fbbf24;background:linear-gradient(180deg,rgba(251,191,36,.15),rgba(251,191,36,.05));box-shadow:0 0 30px rgba(251,191,36,.2)}
+.pond-btn .p-icon{font-size:1.4rem;display:block;margin-bottom:4px}
+.pond-btn .p-name{font-size:.8rem;font-weight:800;letter-spacing:.4px}
+.pond-btn.active .p-name{color:#fbbf24}
 
 .forecast{display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:16px;margin:10px 0;border:1px solid;background:linear-gradient(180deg,rgba(30,41,59,.9),rgba(21,31,52,.9));box-shadow:0 10px 30px rgba(2,6,23,.45)}
 .forecast.good{border-color:rgba(74,222,128,.5);box-shadow:0 0 30px rgba(74,222,128,.15),0 10px 30px rgba(2,6,23,.45)}
@@ -187,8 +201,19 @@ footer{margin-top:20px;text-align:center}
 <header class="hero">
 <div class="ttl"><h1>&#x1F41F; Форель в Красногорске</h1></div>
 <div class="hero-number" id="heroRem">— <span class="unit">кг</span></div>
-<p class="hero-sub">остаток форели в водоёме • обновлено <span id="heroUpd">—</span></p>
+<p class="hero-sub" id="heroSub">остаток форели в водоёме • обновлено <span id="heroUpd">—</span></p>
 </header>
+
+<div class="pond-switch">
+<button class="pond-btn active" id="btnMain" onclick="switchPond('main')">
+<span class="p-icon">🌊</span>
+<span class="p-name">Основной водоём</span>
+</button>
+<button class="pond-btn" id="btnSport" onclick="switchPond('sport')">
+<span class="p-icon">🎯</span>
+<span class="p-name">Спорт-зона</span>
+</button>
+</div>
 
 <div class="forecast" id="forecastBox">
 <div class="emoji" id="fcEmoji">⏳</div>
@@ -282,10 +307,88 @@ try{D=JSON.parse(document.getElementById('sitedata').textContent)}catch(e){conso
 try{
 if(window.Chart){Chart.defaults.color='#94a3b8';Chart.defaults.borderColor='rgba(51,65,85,.5)';Chart.defaults.font.family="system-ui,-apple-system,'Segoe UI',sans-serif"}
 
-var B=D.balance||{};
-document.getElementById('heroRem').innerHTML=(B.remaining||0)+' <span class="unit">кг</span>';
-document.getElementById('heroUpd').textContent=(D.stats&&D.stats.updated)||'—';
+var BALL=D.balance||{};
+var currentPond='main';
 
+function getB(){return BALL[currentPond]||{};}
+
+function renderBalance(){
+  var B=getB();
+  document.getElementById('heroRem').innerHTML=(B.remaining||0)+' <span class="unit">кг</span>';
+  var sub=document.getElementById('heroSub');
+  var label = currentPond==='sport' ? 'Спорт-зона' : 'Основной водоём';
+  sub.innerHTML = label+' • остаток форели • обновлено '+(D.stats&&D.stats.updated||'—');
+
+  document.getElementById('bs').textContent=B.start||'';
+  document.getElementById('st').textContent=B.total_stocked||0;
+  document.getElementById('ct').textContent=B.total_caught||0;
+  document.getElementById('rem').textContent=(B.events&&B.events.length)?('Примерно '+(B.remaining||0)+' кг'):'нет данных';
+  var dss=B.days_since_stock;
+  document.getElementById('dsl').textContent=(dss==null)?'нет данных':(dss<=0?'сегодня':dss+' дн. назад');
+  document.getElementById('upd').textContent=(D.stats&&D.stats.updated)||'';
+  var tps=B.today_pending_stock||0;
+  document.getElementById('pend').textContent=(tps>0)?(' • сегодня запущено '+tps+' кг, в остаток попадёт после отчёта о вылове'):'';
+}
+
+function renderEvents(){
+  var B=getB();
+  if(B.events&&B.events.length){
+    document.getElementById('ev').innerHTML='<thead><tr><th>Дата</th><th style="text-align:center">Тип</th><th>кг</th><th>Комментарий</th></tr></thead><tbody>'+B.events.map(function(e){
+      var z=e.type==='запуск';
+      return '<tr><td style="white-space:nowrap"><b>'+e.day+'</b></td><td style="text-align:center"><span class="badge '+(z?'z':'v')+'">'+(z?'З':'В')+'</span></td><td><b style="color:'+(z?'#4ade80':'#f87171')+'">'+e.kg+' кг</b></td><td class="note"><a href="'+e.url+'" target="_blank">'+e.quote+'</a></td></tr>'
+    }).join('')+'</tbody>';
+  } else {
+    document.getElementById('ev').innerHTML='<tr><td class="note">Пока нет записей.</td></tr>';
+  }
+}
+
+function renderTopDays(){
+  var B=getB();
+  var ser=B.series||{};
+  var dates=ser.dates||[], caught=ser.caught||[], stocked=ser.stocked||[];
+  var arr=[];
+  for(var i=0;i<dates.length;i++){arr.push({d:dates[i], c:caught[i]||0, s:stocked[i]||0});}
+  arr.sort(function(a,b){return b.c-a.c});
+  var top=arr.slice(0,5);
+  var html='';
+  for(var i=0;i<top.length;i++){
+    var r=top[i];
+    html+='<div class="top-day"><div class="rank">'+(i+1)+'</div><div class="d">'+r.d+'</div><div class="kg">'+r.c+' кг</div><div class="meta">запуск: '+r.s+' кг</div></div>';
+  }
+  document.getElementById('topDays').innerHTML=html||'<p class="note">Пока нет данных.</p>';
+}
+
+function renderChart(){
+  var B=getB();
+  var balEl=document.getElementById('balbox');
+  balEl.innerHTML='<div class="chartbox"><canvas id="bal"></canvas></div>';
+  if(B.series&&B.series.dates&&B.series.dates.length){
+    new Chart(document.getElementById('bal'),{data:{labels:B.series.dates,datasets:[
+      {type:'line',label:'Остаток, кг',data:B.series.remaining,borderColor:'#fbbf24',backgroundColor:'rgba(251,191,36,.10)',fill:true,pointRadius:0,borderWidth:2,tension:.35},
+      {type:'bar',label:'Запуск',data:B.series.stocked,backgroundColor:'#34d399',borderRadius:3,maxBarThickness:20},
+      {type:'bar',label:'Вылов',data:B.series.caught,backgroundColor:'#f87171',borderRadius:3,maxBarThickness:20}]},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#e2e8f0',boxWidth:12}}},scales:{x:{ticks:{color:'#94a3b8',maxTicksLimit:8}},y:{ticks:{color:'#94a3b8'}}}}});
+  } else {
+    balEl.innerHTML='<div class="note">Пока нет данных о запусках.</div>';
+  }
+}
+
+function switchPond(p){
+  currentPond=p;
+  document.getElementById('btnMain').classList.toggle('active', p==='main');
+  document.getElementById('btnSport').classList.toggle('active', p==='sport');
+  renderBalance();
+  renderEvents();
+  renderTopDays();
+  renderChart();
+}
+
+renderBalance();
+renderEvents();
+renderTopDays();
+renderChart();
+
+// Прогноз — не зависит от водоёма
 (function(){
   var cw=D.current_weather||{};
   var temp=cw.temp, press=cw.pressure, moon=cw.moon||'';
@@ -312,21 +415,6 @@ document.getElementById('heroUpd').textContent=(D.stats&&D.stats.updated)||'—'
   document.getElementById('fcReason').textContent='Причина: '+reasons.join(' • ');
 })();
 
-(function(){
-  var ser=B.series||{};
-  var dates=ser.dates||[], caught=ser.caught||[], stocked=ser.stocked||[];
-  var arr=[];
-  for(var i=0;i<dates.length;i++){arr.push({d:dates[i], c:caught[i]||0, s:stocked[i]||0});}
-  arr.sort(function(a,b){return b.c-a.c});
-  var top=arr.slice(0,5);
-  var html='';
-  for(var i=0;i<top.length;i++){
-    var r=top[i];
-    html+='<div class="top-day"><div class="rank">'+(i+1)+'</div><div class="d">'+r.d+'</div><div class="kg">'+r.c+' кг</div><div class="meta">запуск: '+r.s+' кг</div></div>';
-  }
-  document.getElementById('topDays').innerHTML=html||'<p class="note">Пока нет данных.</p>';
-})();
-
 function topInfo(){
 var now=new Date();
 document.getElementById('curDate').textContent=now.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
@@ -337,28 +425,6 @@ document.getElementById('curMoon').textContent=(cw.moon==null?'-':cw.moon)}
 function tick(){document.getElementById('curTime').textContent=new Date().toLocaleTimeString('ru-RU')}
 topInfo();tick();setInterval(tick,1000);setInterval(topInfo,60000);
 
-document.getElementById('bs').textContent=B.start||'';
-document.getElementById('st').textContent=B.total_stocked||0;
-document.getElementById('ct').textContent=B.total_caught||0;
-document.getElementById('rem').textContent=(B.events&&B.events.length)?('Примерно '+(B.remaining||0)+' кг'):'нет данных';
-var dss=B.days_since_stock;
-document.getElementById('dsl').textContent=(dss==null)?'нет данных':(dss<=0?'сегодня':dss+' дн. назад');
-document.getElementById('upd').textContent=(D.stats&&D.stats.updated)||'';
-var tps=B.today_pending_stock||0;
-document.getElementById('pend').textContent=(tps>0)?(' • сегодня запущено '+tps+' кг, в остаток попадёт после отчёта о вылове'):'';
-if(B.series&&B.series.dates&&B.series.dates.length){
-new Chart(document.getElementById('bal'),{data:{labels:B.series.dates,datasets:[
-{type:'line',label:'Остаток, кг',data:B.series.remaining,borderColor:'#fbbf24',backgroundColor:'rgba(251,191,36,.10)',fill:true,pointRadius:0,borderWidth:2,tension:.35},
-{type:'bar',label:'Запуск',data:B.series.stocked,backgroundColor:'#34d399',borderRadius:3,maxBarThickness:20},
-{type:'bar',label:'Вылов',data:B.series.caught,backgroundColor:'#f87171',borderRadius:3,maxBarThickness:20}]},
-options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#e2e8f0',boxWidth:12}}},scales:{x:{ticks:{color:'#94a3b8',maxTicksLimit:8}},y:{ticks:{color:'#94a3b8'}}}}})
-}else{document.getElementById('balbox').innerHTML='<div class="note">Пока нет данных о запусках.</div>'}
-if(B.events&&B.events.length){
-document.getElementById('ev').innerHTML='<thead><tr><th>Дата</th><th style="text-align:center">Тип</th><th>кг</th><th>Комментарий</th></tr></thead><tbody>'+B.events.map(function(e){
-var z=e.type==='запуск';
-return '<tr><td style="white-space:nowrap"><b>'+e.day+'</b></td><td style="text-align:center"><span class="badge '+(z?'z':'v')+'">'+(z?'З':'В')+'</span></td><td><b style="color:'+(z?'#4ade80':'#f87171')+'">'+e.kg+' кг</b></td><td class="note"><a href="'+e.url+'" target="_blank">'+e.quote+'</a></td></tr>'
-}).join('')+'</tbody>'
-}else{document.getElementById('ev').innerHTML='<tr><td class="note">Пока нет записей.</td></tr>'}
 var LT=D.llm_time||{};
 if(LT.analyzed>0){
 document.getElementById('llmnote').textContent='Проанализировано отчётов: '+LT.analyzed;
@@ -886,8 +952,8 @@ def build(db, state, last_page):
     print("DEBUG: постов:", total_posts, "| с датой:", with_dates, "| от админов:", admin_posts)
 
     days = defaultdict(list)
-    stock_c = defaultdict(list)
-    catch_c = defaultdict(list)
+    stock_c = defaultdict(lambda: {"main": [], "sport": []})
+    catch_c = defaultdict(lambda: {"main": [], "sport": []})
     reports = []
     llm_cands = []
 
@@ -930,6 +996,11 @@ def build(db, state, last_page):
             except Exception:
                 continue
 
+        is_sport = False
+        if day >= SPORT_ZONE_START and SPORT_RX.search(text):
+            is_sport = True
+        pond = "sport" if is_sport else "main"
+
         for ev in find_events(text, dt):
             d = ev["day"]
             if not d or d < BALANCE_START:
@@ -950,61 +1021,124 @@ def build(db, state, last_page):
                 "quote": ("пост " + dt[5:10] + " " + dt[11:16] + " " + ev["quote"])[:150],
             }
             if ev["kind"] == "stock":
-                stock_c[d].append(rec)
+                stock_c[d][pond].append(rec)
             else:
-                catch_c[d].append(rec)
+                catch_c[d][pond].append(rec)
 
-    day_events = {}
+    def build_pond(pond_key):
+        day_ev = {}
+        for d, recs_by_pond in stock_c.items():
+            recs = recs_by_pond.get(pond_key, [])
+            if not recs: continue
+            pool = [r for r in recs if r["is_fact"]] or recs
+            today_recs = [r for r in pool if r.get("is_today")]
+            pick = (today_recs or pool)
+            day_ev.setdefault(d, {})["stock"] = max(pick, key=lambda r: (r["dt"], r["pos"]))
 
-    for d, recs in stock_c.items():
-        pool = [r for r in recs if r["is_fact"]] or recs
-        today_recs = [r for r in pool if r.get("is_today")]
-        pick = (today_recs or pool)
-        day_events.setdefault(d, {})["stock"] = max(pick, key=lambda r: (r["dt"], r["pos"]))
+        for d, recs_by_pond in catch_c.items():
+            recs = recs_by_pond.get(pond_key, [])
+            if not recs: continue
+            main_recs = [r for r in recs if not r.get("is_plus")]
+            plus_recs = [r for r in recs if r.get("is_plus")]
 
-    for d, recs in catch_c.items():
-        main_recs = [r for r in recs if not r.get("is_plus")]
-        plus_recs = [r for r in recs if r.get("is_plus")]
+            base = 0
+            base_rec = None
+            if main_recs:
+                best = max(main_recs, key=lambda r: (r["dt"], r["pos"]))
+                base = best["kg"]
+                base_rec = best
+            plus_sum = sum(r["kg"] for r in plus_recs)
 
-        base = 0
-        base_rec = None
-        if main_recs:
-            best = max(main_recs, key=lambda r: (r["dt"], r["pos"]))
-            base = best["kg"]
-            base_rec = best
+            if base_rec is None and plus_recs:
+                base_rec = max(plus_recs, key=lambda r: (r["dt"], r["pos"]))
+                base = base_rec["kg"]
+                plus_sum = 0
 
-        plus_sum = sum(r["kg"] for r in plus_recs)
+            total = base + plus_sum
+            if base_rec:
+                quote = base_rec["quote"]
+                if plus_sum:
+                    quote = (quote + " + прибавка " + str(plus_sum) + " кг")[:150]
+                day_ev.setdefault(d, {})["catch"] = {
+                    "kg": total,
+                    "url": base_rec["url"],
+                    "dt": base_rec["dt"],
+                    "pos": base_rec["pos"],
+                    "is_fact": base_rec["is_fact"],
+                    "is_today": base_rec.get("is_today", False),
+                    "quote": quote,
+                }
+        return day_ev
 
-        if base_rec is None and plus_recs:
-            base_rec = max(plus_recs, key=lambda r: (r["dt"], r["pos"]))
-            base = base_rec["kg"]
-            plus_sum = 0
+    manual = {
+        "2026-09-27": {"catch": 312},
+    }
 
-        total = base + plus_sum
-        if base_rec:
-            quote = base_rec["quote"]
-            if plus_sum:
-                quote = (quote + " + прибавка " + str(plus_sum) + " кг")[:150]
-            day_events.setdefault(d, {})["catch"] = {
-                "kg": total,
-                "url": base_rec["url"],
-                "dt": base_rec["dt"],
-                "pos": base_rec["pos"],
-                "is_fact": base_rec["is_fact"],
-                "is_today": base_rec.get("is_today", False),
-                "quote": quote,
-            }
+    day_events_main = build_pond("main")
+    day_events_sport = build_pond("sport")
 
-    for md, vals in MANUAL_EVENTS.items():
+    for md, vals in manual.items():
         for kk in ("stock", "catch"):
             if kk in vals and vals[kk]:
-                day_events.setdefault(md, {})[kk] = {
+                day_events_main.setdefault(md, {})[kk] = {
                     "kg": int(vals[kk]), "url": THREAD, "dt": md + "T23:59",
                     "pos": 10**9, "is_fact": True, "is_today": False,
                     "quote": "ручная правка (MANUAL_EVENTS)",
                 }
 
-    print("DEBUG: дней с событиями:", len(day_events))
+    def calc_balance(day_ev, start_date_str, initial_offset=0):
+        dates, st_l, ct_l, rm_l = [], [], [], []
+        total_st = total_ct = 0
+        last_stock = None
+        rem = initial_offset
+
+        if not day_ev:
+            return {
+                "start": start_date_str, "total_stocked": 0, "total_caught": 0,
+                "remaining": 0, "today_pending_stock": 0, "days_since_stock": None,
+                "series": {"dates": [], "stocked": [], "caught": [], "remaining": []},
+                "events": [],
+            }
+
+        cur = date.fromisoformat(start_date_str)
+        today_obj = date.today()
+        while cur <= today_obj:
+            ds = str(cur)
+            ev = day_ev.get(ds, {})
+            s = ev.get("stock", {}).get("kg", 0)
+            c = ev.get("catch", {}).get("kg", 0)
+            if cur == today_obj and s and not c:
+                s = 0
+            if ev.get("stock"): last_stock = ds
+            total_st += s; total_ct += c
+            rem = rem + s - c
+            dates.append(ds); st_l.append(s); ct_l.append(c); rm_l.append(rem)
+            cur += timedelta(days=1)
+
+        tev = day_ev.get(str(date.today()), {})
+        today_pending_stock = tev["stock"]["kg"] if (tev.get("stock") and not tev.get("catch")) else 0
+
+        events = []
+        for d in sorted(day_ev, reverse=True)[:40]:
+            for k in ("stock", "catch"):
+                if k in day_ev[d]:
+                    e = day_ev[d][k]
+                    events.append({"day": d, "type": "запуск" if k == "stock" else "вылов",
+                                   "kg": e["kg"], "url": e["url"], "quote": e["quote"]})
+
+        return {
+            "start": start_date_str, "total_stocked": total_st, "total_caught": total_ct,
+            "remaining": rem, "today_pending_stock": today_pending_stock,
+            "days_since_stock": ((date.today() - date.fromisoformat(last_stock)).days if last_stock else None),
+            "series": {"dates": dates, "stocked": st_l, "caught": ct_l, "remaining": rm_l},
+            "events": events,
+        }
+
+    balance_main = calc_balance(day_events_main, BALANCE_START)
+    balance_sport = calc_balance(day_events_sport, SPORT_ZONE_START)
+
+    print("DEBUG: дней с событиями (основной):", len(day_events_main),
+          "| (спорт):", len(day_events_sport))
 
     weather = load_weather()
 
@@ -1057,38 +1191,6 @@ def build(db, state, last_page):
                       "t_night": w.get("t_night"), "wind": wind, "pressure": w.get("pressure"),
                       "precip": w.get("precip"), "moon": moon_phase(d), "links": days[d][:5]})
 
-    dates, st_l, ct_l, rm_l = [], [], [], []
-    total_st = total_ct = 0
-    last_stock = None
-
-    if day_events:
-        cur = date.fromisoformat(min(day_events))
-        rem = 0
-        today_obj = date.today()
-        while cur <= today_obj:
-            ds = str(cur)
-            ev = day_events.get(ds, {})
-            s = ev.get("stock", {}).get("kg", 0)
-            c = ev.get("catch", {}).get("kg", 0)
-            if cur == today_obj and s and not c:
-                s = 0
-            if ev.get("stock"): last_stock = ds
-            total_st += s; total_ct += c
-            rem = rem + s - c
-            dates.append(ds); st_l.append(s); ct_l.append(c); rm_l.append(rem)
-            cur += timedelta(days=1)
-
-    tev = day_events.get(str(date.today()), {}) if day_events else {}
-    today_pending_stock = tev["stock"]["kg"] if (tev.get("stock") and not tev.get("catch")) else 0
-
-    events = []
-    for d in sorted(day_events, reverse=True)[:40]:
-        for k in ("stock", "catch"):
-            if k in day_events[d]:
-                e = day_events[d][k]
-                events.append({"day": d, "type": "запуск" if k == "stock" else "вылов",
-                               "kg": e["kg"], "url": e["url"], "quote": e["quote"]})
-
     reports.sort(key=lambda r: r["day"], reverse=True)
     tl = defaultdict(int); tu = defaultdict(int)
     for r in reports:
@@ -1097,16 +1199,9 @@ def build(db, state, last_page):
 
     cw = weather.get(str(date.today())) or {}
 
-    balance = {
-        "start": BALANCE_START, "total_stocked": total_st, "total_caught": total_ct,
-        "remaining": rm_l[-1] if rm_l else 0, "today_pending_stock": today_pending_stock,
-        "days_since_stock": ((date.today() - date.fromisoformat(last_stock)).days if last_stock else None),
-        "series": {"dates": dates, "stocked": st_l, "caught": ct_l, "remaining": rm_l},
-        "events": events,
-    }
-
     payload = json.dumps({
-        "stats": stats, "table": table, "balance": balance,
+        "stats": stats, "table": table,
+        "balance": {"main": balance_main, "sport": balance_sport},
         "current_weather": {"temp": cw.get("t_day"), "pressure": cw.get("pressure"),
                             "precip": cw.get("precip"), "moon": moon_phase(str(date.today()))},
         "llm_time": llm_time, "moon_stats": moon_stats, "reports": reports[:80],
@@ -1117,8 +1212,10 @@ def build(db, state, last_page):
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(TEMPLATE.replace("__DATA__", payload))
 
-    print("Sait sobran. Ostatok " + str(balance["remaining"]) + " kg, otchetov " +
-          str(len(reports)) + ", LLM " + str(analyzed))
+    print("Sait sobran.")
+    print("  Основной водоём: остаток", balance_main["remaining"], "кг, событий", len(balance_main["events"]))
+    print("  Спорт-зона:      остаток", balance_sport["remaining"], "кг, событий", len(balance_sport["events"]))
+    print("  LLM:", analyzed, "отчётов")
 
 
 def main():
