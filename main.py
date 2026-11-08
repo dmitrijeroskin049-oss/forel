@@ -14,8 +14,8 @@ START_DATE = "2024-01-01"
 BALANCE_START = "2026-09-01"
 REPORT_START = "2026-09-01"
 
-# === Дата открытия спорт-зоны (30 октября) ===
-SPORT_ZONE_START = "2026-10-30"
+# === Дата старта Спорт-зоны ===
+SPORT_ZONE_START = "2026-10-31"
 
 MANUAL_EVENTS = {
     "2026-09-27": {"catch": 312},
@@ -60,8 +60,9 @@ TODAY_RX = re.compile(r"за\s+сегодня|сегодня\s+(вылов|ул�
 PRICE_RX = re.compile(r"руб|₽|\bр\.?\b|цена|стоит|шок|у\.е\.|бакс|\$|евро", re.I)
 PLUS_RX = re.compile(r"доловил|к\s+вылову|к\s+сегодняшн|к\s+утренн|к\s+вечерн|плюс", re.I)
 
-# === Маркер спорт-зоны (расширенный) ===
-SPORT_RX = re.compile(r"спорт[\s-]?зон|спортивн\w*\s+зон|на\s+спорте|спортивк|спортивной\s+зон", re.I)
+# Маркеры спорт-зоны
+SPORT_RX = re.compile(r"спорт[\s-]?зон|спортивн\w*\s+зон|на\s+спорте|спортивк", re.I)
+MAIN_RX = re.compile(r"основн\w*\s+водо", re.I)
 
 WIND_DIRS = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"]
 MOON_ORDER = ["новолуние", "растущий серп", "первая четверть", "растущая", "полнолуние", "убывающая", "последняя четверть", "убывающий серп"]
@@ -996,9 +997,14 @@ def build(db, state, last_page):
             except Exception:
                 continue
 
+        # === ЛОГИКА РАСПРЕДЕЛЕНИЯ ===
+        # Все, что с 31 октября и позже -> спорт зона по умолчанию
         is_sport = False
-        if day >= SPORT_ZONE_START and SPORT_RX.search(text):
+        if day >= SPORT_ZONE_START:
             is_sport = True
+            # Исключение: если явно написан "основной водоем", то это основной
+            if MAIN_RX.search(text):
+                is_sport = False
         pond = "sport" if is_sport else "main"
 
         for ev in find_events(text, dt):
